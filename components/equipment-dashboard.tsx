@@ -21,13 +21,145 @@ const SlidingPanel = ({ data, onClose, children }: { data: any; onClose: () => v
   if (!data) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white p-6 rounded shadow-lg">
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
         <h2 className="text-xl font-bold mb-4">Информация об оборудовании</h2>
         {children}
         <button type="button" onClick={onClose} className="mt-4 bg-blue-500 text-white p-2 rounded">
           Закрыть
         </button>
+      </div>
+    </div>
+  );
+};
+
+// Отдельная панель добавления оборудования
+const AddEquipmentPanel = ({ onClose, onSubmit, newEquipment, handleInputChange, buildings, labs, rooms }: { 
+  onClose: () => void; 
+  onSubmit: (e: React.FormEvent) => void;
+  newEquipment: Equipment;
+  handleInputChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+  buildings: Building[];
+  labs: Lab[];
+  rooms: Room[];
+}) => {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">Добавить новое оборудование</h2>
+          <button 
+            onClick={onClose} 
+            className="text-gray-500 hover:text-gray-700"
+          >
+            ✕
+          </button>
+        </div>
+        <p className="text-gray-600 mb-4">Заполните данные для добавления нового оборудования</p>
+        <form onSubmit={onSubmit} className="flex flex-col gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Название оборудования</label>
+            <Input
+              name="name"
+              placeholder="Например: Микроскоп"
+              value={newEquipment.name}
+              onChange={handleInputChange}
+              required
+              className="w-full"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Группа</label>
+            <Input
+              name="group"
+              placeholder="Например: Лабораторное оборудование"
+              value={newEquipment.group}
+              onChange={handleInputChange}
+              required
+              className="w-full"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Владелец</label>
+            <Input
+              name="owner"
+              placeholder="Например: Физический факультет"
+              value={newEquipment.owner}
+              onChange={handleInputChange}
+              required
+              className="w-full"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Место</label>
+            <Input
+              name="location"
+              placeholder="Например: Шкаф №5"
+              value={newEquipment.location}
+              onChange={handleInputChange}
+              required
+              className="w-full"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Комната</label>
+            <select 
+              name="room" 
+              onChange={handleInputChange} 
+              required
+              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Выберите комнату</option>
+              {rooms.map((room) => (
+                <option key={room.id} value={room.id}>
+                  {room.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Здание</label>
+            <select 
+              name="building" 
+              onChange={handleInputChange} 
+              required
+              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Выберите здание</option>
+              {buildings.map((building) => (
+                <option key={building.id} value={building.id}>
+                  {building.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Лаборатория</label>
+            <select 
+              name="lab" 
+              onChange={handleInputChange} 
+              required
+              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Выберите лабораторию</option>
+              {labs.map((lab) => (
+                <option key={lab.id} value={lab.id}>
+                  {lab.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          <Button type="submit" className="mt-2 bg-green-500 hover:bg-green-600 text-white">
+            Добавить оборудование
+          </Button>
+        </form>
       </div>
     </div>
   );
@@ -278,8 +410,18 @@ export default function EquipmentDashboard() {
             <TabsContent value="equipment" className="mt-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Инвенторизация оборудоваания</CardTitle>
-                  <CardDescription>Управление и отслеживание оборудлвания</CardDescription>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle>Инвенторизация оборудоваания</CardTitle>
+                      <CardDescription>Управление и отслеживание оборудлвания</CardDescription>
+                    </div>
+                    <Button 
+                      onClick={() => setIsAddPanelOpen(true)} 
+                      className="bg-green-500 hover:bg-green-600 text-white"
+                    >
+                      Добавить оборудование
+                    </Button>
+                  </div>
                   <div className="mt-2">
                     <Input
                       placeholder="Поиск оборудования..."
@@ -341,6 +483,7 @@ export default function EquipmentDashboard() {
                     })}
                     students={students}
                     onReturn={handleEquipmentReturn}
+                    onCheckout={handleEquipmentCheckout}
                   />
                 </CardContent>
               </Card>
@@ -434,73 +577,16 @@ export default function EquipmentDashboard() {
         </SlidingPanel>
       )}
 
-      <div className="mt-6">
-        <Button onClick={() => router.push("/add-equipment")} className="bg-green-500 text-white">
-          Добавить новое оборудование
-        </Button>
-      </div>
-
       {isAddPanelOpen && (
-        <SlidingPanel data={null} onClose={() => setIsAddPanelOpen(false)}>
-          <h2 className="text-lg font-semibold">Добавить новое оборудование</h2>
-          <form onSubmit={handleAddEquipment} className="flex flex-col gap-4">
-            <Input
-              name="name"
-              placeholder="Название оборудования"
-              value={newEquipment.name}
-              onChange={handleInputChange}
-              required
-            />
-            <Input
-              name="group"
-              placeholder="Группа"
-              value={newEquipment.group}
-              onChange={handleInputChange}
-              required
-            />
-            <Input
-              name="owner"
-              placeholder="Владелец"
-              value={newEquipment.owner}
-              onChange={handleInputChange}
-              required
-            />
-            <Input
-              name="location"
-              placeholder="Место"
-              value={newEquipment.location}
-              onChange={handleInputChange}
-              required
-            />
-            <select name="room" onChange={handleInputChange} required>
-              <option value="">Выберите комнату</option>
-              {rooms.map((room) => (
-                <option key={room.id} value={room.id}>
-                  {room.name}
-                </option>
-              ))}
-            </select>
-            <select name="building" onChange={handleInputChange} required>
-              <option value="">Выберите здание</option>
-              {buildings.map((building) => (
-                <option key={building.id} value={building.id}>
-                  {building.name}
-                </option>
-              ))}
-            </select>
-            <select name="lab" onChange={handleInputChange} required>
-              <option value="">Выберите лабораторию</option>
-              {labs.map((lab) => (
-                <option key={lab.id} value={lab.id}>
-                  {lab.name}
-                </option>
-              ))}
-            </select>
-            <Button type="submit" className="bg-blue-500 text-white">
-              Добавить оборудование
-            </Button>
-          </form>
-        </SlidingPanel>
+        <AddEquipmentPanel
+          onClose={() => setIsAddPanelOpen(false)}
+          onSubmit={handleAddEquipment}
+          newEquipment={newEquipment}
+          handleInputChange={handleInputChange}
+          buildings={buildings}
+          labs={labs}
+          rooms={rooms}
+        />
       )}
     </div>
   )
