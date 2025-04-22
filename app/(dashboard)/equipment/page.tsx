@@ -39,7 +39,7 @@ export default function EquipmentPage() {
     fetchData()
   }, [])
 
-  const handleReturn = async (equipmentId: number) => {
+  const handleReturn = async (equipmentId: string) => {
     try {
       // TODO: Implement return API call
       console.log('Return equipment:', equipmentId)
@@ -55,7 +55,7 @@ export default function EquipmentPage() {
     }
   }
 
-  const handleCheckout = async (studentId: number, equipmentId: number) => {
+  const handleCheckout = async (studentId: string, equipmentId: string) => {
     try {
       // TODO: Implement checkout API call
       console.log('Checkout equipment:', equipmentId, 'to student:', studentId)

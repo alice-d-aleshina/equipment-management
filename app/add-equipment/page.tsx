@@ -6,7 +6,7 @@ import type { Equipment } from "@/lib/types"
 
 export default function AddEquipmentPage() {
   const router = useRouter();
-  const [newEquipment, setNewEquipment] = useState<Equipment>({
+  const [newEquipment, setNewEquipment] = useState<Partial<Equipment>>({
     id: "",
     name: "",
     status: "available",
