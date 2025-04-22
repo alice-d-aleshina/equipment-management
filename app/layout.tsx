@@ -1,20 +1,55 @@
-import type { Metadata } from 'next'
 import './globals.css'
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import { ThemeProvider } from "@/components/ui/theme-provider"
+import { cn } from "@/lib/utils"
 
-export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.dev',
+// Initialize data on the server side
+import { initData } from '@/lib/init-data'
+
+const inter = Inter({ subsets: ['latin'] })
+
+// This ensures data is loaded before the app renders
+export async function generateMetadata(): Promise<Metadata> {
+  try {
+    // Initialize data from Supabase
+    await initData();
+    
+    return {
+      title: 'Управление оборудованием',
+      description: 'Система управления лабораторным оборудованием',
+    };
+  } catch (error) {
+    console.error('Error initializing data:', error);
+    
+    return {
+      title: 'Управление оборудованием',
+      description: 'Система управления лабораторным оборудованием',
+    };
+  }
 }
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode
-}>) {
+}) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="ru" suppressHydrationWarning>
+      <head />
+      <body className={cn(
+        inter.className,
+        "min-h-screen bg-background antialiased"
+      )}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   )
 }

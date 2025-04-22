@@ -1,12 +1,18 @@
 export interface Equipment {
   id: string
   name: string
-  status: "available" | "checked-out"
-  checkedOutBy?: string | null
-  checkedOutAt?: Date | null
+  nameEn: string
+  type: string
+  status: "available" | "in_use" | "maintenance" | "broken" | "checked-out"
+  location: string
+  lastMaintenance: string
+  nextMaintenance: string
+  assignedTo?: string
+  qrCode: string
+  checkedOutBy: string | null
+  checkedOutAt: Date | null
   group: string
   owner: string
-  location: string
   room: number
   building: number
   lab: number
@@ -17,6 +23,8 @@ export interface Student {
   name: string
   group: string
   hasAccess: boolean
+  email?: string
+  phone?: string
 }
 
 export interface Notification {
@@ -52,25 +60,20 @@ export interface Request {
 }
 
 export interface Room {
-  id: number // Primary Key
+  id: number
   name: string
-  lab: number // Foreign Key
-  created: Date
-  building: number // Foreign Key
-  type: string
+  labId: number
 }
 
 export interface Lab {
-  id: number // Primary Key
+  id: number
   name: string
-  created: Date
+  buildingId: number
 }
 
 export interface Building {
-  id: number // Primary Key
-  address: string
+  id: number
   name: string
-  created: Date
 }
 
 export interface Section {

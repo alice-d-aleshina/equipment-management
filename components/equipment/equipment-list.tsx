@@ -3,15 +3,35 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
-import { CheckCircle, XCircle, RotateCcw, Package2, Filter, Search, ArrowDownToLine, ArrowUpFromLine, Package, Users, Plus, Scan, CheckCircle2, Clock } from "lucide-react"
-import type { Equipment, Student } from "@/lib/types"
+import { CheckCircle, XCircle, RotateCcw, Package2, Filter, Search, ArrowDownToLine, ArrowUpFromLine, Package, Users, Plus, Scan, CheckCircle2, Clock, AlertTriangle, Wrench } from "lucide-react"
 import { formatDate } from "@/lib/utils"
 import { useState, useEffect } from "react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
+
+interface Equipment {
+  id: string;
+  name: string;
+  nameEn: string;
+  type: string;
+  status: 'available' | 'in_use' | 'maintenance' | 'broken' | 'checked-out';
+  location: string;
+  lastMaintenance: string;
+  nextMaintenance: string;
+  assignedTo?: string;
+  qrCode: string;
+  checkedOutBy: string | null;
+  checkedOutAt: Date | null;
+}
+
+interface Student {
+  id: string;
+  name: string;
+  group: string;
+  hasAccess: boolean;
+  email?: string;
+  phone?: string;
+}
 
 interface EquipmentListProps {
   equipment: Equipment[]
@@ -30,265 +50,137 @@ export default function EquipmentList({
   onAddEquipment,
   onScanQR
 }: EquipmentListProps) {
-  const [showMobileView, setShowMobileView] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'checked-out'>('all');
-  const [selectedStudentId, setSelectedStudentId] = useState<string>("");
-  const [activeTab, setActiveTab] = useState("equipment");
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedStudent, setSelectedStudent] = useState<string | null>(null)
+  const [isClient, setIsClient] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'in_use' | 'maintenance' | 'broken'>('all');
+  const [selectedStudents, setSelectedStudents] = useState<Record<string, string>>({});
 
-  // Обработчик изменения размера окна для отзывчивого UI
   useEffect(() => {
-    // Инициализация состояния при монтировании компонента
-    setShowMobileView(window.innerWidth < 768);
-    
-    const handleResize = () => {
-      setShowMobileView(window.innerWidth < 768);
-    };
-    
-    window.addEventListener('resize', handleResize);
-    // Очистка обработчика при размонтировании компонента
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    setIsClient(true)
+  }, [])
 
-  // Get student name by ID
-  const getStudentName = (studentId: string | null | undefined): string => {
-    if (!studentId) return "Неизвестно";
-    const student = students.find((s) => s.id === studentId);
-    return student ? student.name : "Неизвестно";
+  const filteredEquipment = equipment.filter(item => {
+    return filterStatus === 'all' || item.status === filterStatus;
+  });
+
+  const handleStudentSelect = (equipmentId: string, studentId: string) => {
+    setSelectedStudents(prev => ({
+      ...prev,
+      [equipmentId]: studentId
+    }));
   };
 
-  // Handle equipment checkout/return
-  const handleEquipmentToggle = (item: Equipment) => {
-    if (item.status === "checked-out") {
-      onReturn(item.id);
-    } else if (onCheckout && selectedStudentId) {
-      onCheckout(selectedStudentId, item.id);
-      setSelectedStudentId("");
+  const handleConfirmCheckout = (equipmentId: string) => {
+    const studentId = selectedStudents[equipmentId];
+    if (studentId) {
+      onCheckout(studentId, equipmentId);
+      setSelectedStudents(prev => {
+        const newState = { ...prev };
+        delete newState[equipmentId];
+        return newState;
+      });
     }
   };
 
-  // Filter equipment by status and search query
-  const filteredEquipment = equipment.filter(item => {
-    const matchesStatus = filterStatus === 'all' || item.status === filterStatus;
-    const searchLower = searchQuery.toLowerCase();
-    const matchesSearch = 
-      item.name.toLowerCase().includes(searchLower) ||
-      item.group.toLowerCase().includes(searchLower) ||
-      item.owner.toLowerCase().includes(searchLower) ||
-      item.location.toLowerCase().includes(searchLower);
-    
-    return matchesStatus && matchesSearch;
-  });
-
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: Equipment['status']) => {
     switch (status) {
       case "available":
         return "bg-green-100 text-green-800";
+      case "in_use":
       case "checked-out":
+        return "bg-blue-100 text-blue-800";
+      case "maintenance":
         return "bg-yellow-100 text-yellow-800";
+      case "broken":
+        return "bg-red-100 text-red-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: Equipment['status']) => {
     switch (status) {
       case "available":
         return <CheckCircle2 className="h-4 w-4" />;
+      case "in_use":
       case "checked-out":
-        return <Clock className="h-4 w-4" />;
+        return <Users className="h-4 w-4" />;
+      case "maintenance":
+        return <Wrench className="h-4 w-4" />;
+      case "broken":
+        return <AlertTriangle className="h-4 w-4" />;
       default:
         return null;
     }
   };
 
-  const getStatusText = (status: string) => {
+  const getStatusText = (status: Equipment['status']) => {
     switch (status) {
       case "available":
         return "Доступно";
+      case "in_use":
       case "checked-out":
-        return "Выдано";
+        return "Используется";
+      case "maintenance":
+        return "На обслуживании";
+      case "broken":
+        return "Сломано";
       default:
-        return "Неизвестно";
+        return status;
     }
   };
 
-  // Mobile view
-  if (showMobileView) {
-    return (
-      <div className="bg-white">
-        <div className="border-b border-gray-200 p-4">
-          <div className="flex gap-2 mb-4">
-            <Button 
-              size="sm" 
-              variant={filterStatus === 'all' ? 'default' : 'outline'}
-              onClick={() => setFilterStatus('all')}
-              className="flex-1"
-            >
-              Все
-            </Button>
-            <Button 
-              size="sm" 
-              variant={filterStatus === 'available' ? 'default' : 'outline'}
-              onClick={() => setFilterStatus('available')}
-              className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-            >
-              Доступно
-            </Button>
-            <Button 
-              size="sm" 
-              variant={filterStatus === 'checked-out' ? 'default' : 'outline'}
-              onClick={() => setFilterStatus('checked-out')}
-              className="flex-1 bg-gray-600 hover:bg-gray-700 text-white"
-            >
-              Выдано
-            </Button>
-          </div>
-        </div>
+  const getStudentName = (studentId: string | null) => {
+    if (!studentId) return '—';
+    const student = students.find(s => s.id === studentId);
+    return student ? `${student.name} (${student.group})` : '—';
+  };
 
-        {filteredEquipment.length === 0 ? (
-          <div className="text-center py-8 px-4">
-            <div className="mx-auto w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
-              <Search className="h-6 w-6 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-medium text-gray-900">Оборудование не найдено</h3>
-            <p className="mt-1 text-sm text-gray-500">Попробуйте изменить параметры поиска</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {filteredEquipment.map((item) => (
-              <div key={item.id} className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
-                    <Package2 className="h-5 w-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium text-gray-900 truncate">{item.name}</p>
-                      <Badge className={`${
-                        item.status === "available" 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        {item.status === "available" ? "Доступно" : "Выдано"}
-                      </Badge>
-                    </div>
-                    
-                    <div className="mt-1 text-sm text-gray-500">
-                      <p>ID: {item.id}</p>
-                      <p>Группа: {item.group}</p>
-                      <p>Место: {item.location}</p>
-                    </div>
-                    
-                    {item.status === "checked-out" && (
-                      <div className="mt-3 p-2 bg-amber-50 rounded-md text-sm">
-                        <p className="flex justify-between text-amber-800">
-                          <span className="font-medium">Выдано:</span> 
-                          <span>{getStudentName(item.checkedOutBy)}</span>
-                        </p>
-                        <p className="flex justify-between text-amber-800">
-                          <span className="font-medium">Время:</span> 
-                          <span>{item.checkedOutAt ? formatDate(item.checkedOutAt) : "N/A"}</span>
-                        </p>
-                      </div>
-                    )}
-                    
-                    <div className="mt-3">
-                      {item.status === "available" ? (
-                        <div className="flex items-center gap-2">
-                          <Badge className="bg-green-100 text-green-800">
-                            <CheckCircle className="mr-1 h-3 w-3" />
-                            Доступно для выдачи
-                          </Badge>
-                        </div>
-                      ) : (
-                        <Button 
-                          size="sm" 
-                          onClick={() => onReturn(item.id)}
-                          className="w-full bg-amber-600 hover:bg-amber-700"
-                        >
-                          <ArrowUpFromLine className="h-4 w-4 mr-1" />
-                          Вернуть
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
+  if (!isClient) {
+    return null;
   }
 
-  // Desktop view
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <div className="flex gap-2 w-full sm:w-auto">
-          <div className="relative w-[300px]">
-            <Input
-              placeholder="Поиск по названию, месту..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-9 bg-white border-gray-200"
-            />
-          </div>
-          <div className="flex gap-1">
-            <Button 
-              size="sm" 
-              variant={filterStatus === 'all' ? 'default' : 'outline'}
-              onClick={() => setFilterStatus('all')}
-              className="px-3"
-            >
-              Все
-            </Button>
-            <Button 
-              size="sm" 
-              variant={filterStatus === 'available' ? 'default' : 'outline'}
-              onClick={() => setFilterStatus('available')}
-              className={`px-3 ${filterStatus === 'available' ? 'bg-green-600 hover:bg-green-700 text-white' : ''}`}
-            >
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-              Доступно
-            </Button>
-            <Button 
-              size="sm" 
-              variant={filterStatus === 'checked-out' ? 'default' : 'outline'}
-              onClick={() => setFilterStatus('checked-out')}
-              className={`px-3 ${filterStatus === 'checked-out' ? 'bg-yellow-600 hover:bg-yellow-700 text-white' : ''}`}
-            >
-              <Clock className="h-4 w-4 mr-2" />
-              Выдано
-            </Button>
-          </div>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={onScanQR}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Select 
+            value={filterStatus} 
+            onValueChange={(value: 'all' | 'available' | 'in_use' | 'maintenance' | 'broken') => setFilterStatus(value)}
           >
-            <Scan className="h-4 w-4 mr-2" />
-            Сканировать QR
-          </Button>
-          <Button 
-            variant="default" 
-            size="sm"
-            onClick={onAddEquipment}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Добавить оборудование
-          </Button>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Статус" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все</SelectItem>
+              <SelectItem value="available">Доступно</SelectItem>
+              <SelectItem value="in_use">Используется</SelectItem>
+              <SelectItem value="maintenance">На обслуживании</SelectItem>
+              <SelectItem value="broken">Сломано</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2">
+          {onScanQR && (
+            <Button onClick={onScanQR} variant="outline">
+              <Scan className="h-4 w-4 mr-2" />
+              Сканировать QR
+            </Button>
+          )}
+          {onAddEquipment && (
+            <Button onClick={onAddEquipment}>
+              <Plus className="h-4 w-4 mr-2" />
+              Добавить оборудование
+            </Button>
+          )}
         </div>
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200">
+      <div className="border rounded-lg">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Название</TableHead>
-              <TableHead>Группа</TableHead>
+              <TableHead>Тип</TableHead>
               <TableHead>Владелец</TableHead>
               <TableHead>Место</TableHead>
               <TableHead>Статус</TableHead>
@@ -298,62 +190,60 @@ export default function EquipmentList({
           <TableBody>
             {filteredEquipment.map((item) => (
               <TableRow key={item.id}>
-                <TableCell className="font-medium">{item.name}</TableCell>
-                <TableCell>{item.group}</TableCell>
-                <TableCell>{item.owner}</TableCell>
+                <TableCell className="font-medium">
+                  <div>{item.name}</div>
+                  <div className="text-sm text-gray-500">{item.nameEn}</div>
+                </TableCell>
+                <TableCell>{item.type}</TableCell>
+                <TableCell>{getStudentName(item.checkedOutBy)}</TableCell>
                 <TableCell>{item.location}</TableCell>
                 <TableCell>
-                  <Badge 
-                    variant="secondary" 
-                    className={`${getStatusColor(item.status)} flex items-center gap-1 w-fit`}
-                  >
-                    {getStatusIcon(item.status)}
-                    {getStatusText(item.status)}
+                  <Badge className={getStatusColor(item.status)}>
+                    <span className="flex items-center gap-1">
+                      {getStatusIcon(item.status)}
+                      {getStatusText(item.status)}
+                    </span>
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-2">
-                    {item.status === "available" ? (
-                      <>
-                        <Select
-                          value={selectedStudent || ""}
-                          onValueChange={setSelectedStudent}
-                        >
-                          <SelectTrigger className="w-[200px]">
-                            <SelectValue placeholder="Выберите студента" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {students
-                              .filter((s) => s.hasAccess)
-                              .map((student) => (
-                                <SelectItem key={student.id} value={student.id}>
-                                  {student.name}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                        {selectedStudent && (
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              onCheckout(selectedStudent, item.id);
-                              setSelectedStudent(null);
-                            }}
-                          >
-                            Выдать
-                          </Button>
-                        )}
-                      </>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onReturn(item.id)}
+                  {item.status === 'available' ? (
+                    <div className="flex items-center gap-2">
+                      <Select 
+                        value={selectedStudents[item.id] || ""} 
+                        onValueChange={(value) => handleStudentSelect(item.id, value)}
                       >
-                        Вернуть
-                      </Button>
-                    )}
-                  </div>
+                        <SelectTrigger className="w-[200px]">
+                          <SelectValue placeholder="Выберите студента" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {students.map((student) => (
+                            <SelectItem 
+                              key={student.id} 
+                              value={student.id}
+                              disabled={!student.hasAccess}
+                            >
+                              {student.name} ({student.group}) {!student.hasAccess && '- Нет доступа'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {selectedStudents[item.id] && (
+                        <Button onClick={() => handleConfirmCheckout(item.id)} size="sm" className="bg-green-500 hover:bg-green-600">
+                          <ArrowUpFromLine className="h-4 w-4 mr-2" />
+                          Выдать
+                        </Button>
+                      )}
+                    </div>
+                  ) : (item.status === 'in_use' || item.status === 'checked-out') ? (
+                    <Button onClick={() => onReturn(item.id)} variant="outline" size="sm" className="border-blue-200 text-blue-600 hover:bg-blue-50">
+                      <ArrowDownToLine className="h-4 w-4 mr-2" />
+                      Вернуть
+                    </Button>
+                  ) : (
+                    <Button disabled variant="outline" size="sm">
+                      {item.status === 'maintenance' ? 'На обслуживании' : 'Недоступно'}
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

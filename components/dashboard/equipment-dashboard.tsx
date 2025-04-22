@@ -38,7 +38,7 @@ const SlidingPanel = ({ data, onClose, children }: { data: any; onClose: () => v
 const AddEquipmentPanel = ({ onClose, onSubmit, newEquipment, handleInputChange, buildings, labs, rooms }: {
   onClose: () => void;
   onSubmit: (e: React.FormEvent) => void;
-  newEquipment: Equipment;
+  newEquipment: Partial<Equipment>;
   handleInputChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
   buildings: Building[];
   labs: Lab[];
@@ -167,8 +167,8 @@ const AddEquipmentPanel = ({ onClose, onSubmit, newEquipment, handleInputChange,
 };
 
 export default function EquipmentDashboard() {
-  const [equipment, setEquipment] = useState<Equipment[]>(initialEquipment)
-  const [students, setStudents] = useState<Student[]>(initialStudents)
+  const [equipment, setEquipment] = useState<Equipment[]>([])
+  const [students, setStudents] = useState<Student[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [readerActive, setReaderActive] = useState(true)
@@ -187,18 +187,23 @@ export default function EquipmentDashboard() {
   const [selectedRoom, setSelectedRoom] = useState<number | null>(null);
   const [selectedBuilding, setSelectedBuilding] = useState<number | null>(null);
   const [selectedLab, setSelectedLab] = useState<number | null>(null);
-  const [buildings, setBuildings] = useState<Building[]>([]);
-  const [labs, setLabs] = useState<Lab[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [newEquipment, setNewEquipment] = useState<Equipment>({
+  const [buildings, setBuildings] = useState<Building[]>([])
+  const [labs, setLabs] = useState<Lab[]>([])
+  const [rooms, setRooms] = useState<Room[]>([])
+  const [newEquipment, setNewEquipment] = useState<Partial<Equipment>>({
     id: "",
     name: "",
+    nameEn: "",
+    type: "",
     status: "available",
+    location: "",
+    lastMaintenance: "",
+    nextMaintenance: "",
+    qrCode: "",
     checkedOutBy: null,
     checkedOutAt: null,
     group: "",
     owner: "",
-    location: "",
     room: 0,
     building: 0,
     lab: 0,
@@ -210,19 +215,29 @@ export default function EquipmentDashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const buildingsResponse = await fetch('/api/buildings'); // Adjust the endpoint as necessary
-        const labsResponse = await fetch('/api/labs'); // Adjust the endpoint as necessary
-        const roomsResponse = await fetch('/api/rooms'); // Adjust the endpoint as necessary
+        // Fetch buildings, labs, and rooms
+        const buildingsResponse = await fetch('/api/buildings');
+        const labsResponse = await fetch('/api/labs');
+        const roomsResponse = await fetch('/api/rooms');
+
+        // Fetch equipment and students
+        const equipmentResponse = await fetch('/api/equipment');
+        const studentsResponse = await fetch('/api/users');
 
         const buildingsData = await buildingsResponse.json();
         const labsData = await labsResponse.json();
         const roomsData = await roomsResponse.json();
+        const equipmentData = await equipmentResponse.json();
+        const studentsData = await studentsResponse.json();
 
         setBuildings(buildingsData);
         setLabs(labsData);
         setRooms(roomsData);
+        setEquipment(equipmentData);
+        setStudents(studentsData);
       } catch (error) {
         console.error("Error fetching data:", error);
+        addNotification("Ошибка при загрузке данных", "error");
       }
     };
 
@@ -242,68 +257,104 @@ export default function EquipmentDashboard() {
   }
 
   // Handle equipment checkout
-  const handleEquipmentCheckout = (studentId: string, equipmentId: string) => {
-    const student = students.find((s) => s.id === studentId)
-    const item = equipment.find((e) => e.id === equipmentId)
+  const handleEquipmentCheckout = async (studentId: string, equipmentId: string) => {
+    try {
+      const response = await fetch(`/api/equipment/${equipmentId}?action=checkout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId: parseInt(studentId) }),
+      });
 
-    if (!student || !item) {
-      addNotification("Студент или оборудоваание не найдено", "error")
-      return
+      if (!response.ok) {
+        throw new Error('Failed to checkout equipment');
+      }
+
+      const updatedEquipment = await response.json();
+      
+      // Update local state
+      setEquipment(prev => 
+        prev.map(item => item.id === equipmentId ? updatedEquipment : item)
+      );
+
+      const student = students.find((s) => s.id === studentId);
+      const item = equipment.find((e) => e.id === equipmentId);
+      
+      if (student && item) {
+        addNotification(`${item.name} выдано студенту ${student.name}`, "success");
+      }
+    } catch (error) {
+      console.error('Error checking out equipment:', error);
+      addNotification("Ошибка при выдаче оборудования", "error");
     }
-
-    if (!student.hasAccess) {
-      addNotification(`Доступ заапрещен ${student.name}`, "error")
-      return
-    }
-
-    if (item.status === "checked-out") {
-      addNotification(`${item.name} уже выдано`, "error")
-      return
-    }
-
-    // Update equipment status
-    setEquipment(
-      equipment.map((e) =>
-        e.id === equipmentId ? { ...e, status: "checked-out", checkedOutBy: studentId, checkedOutAt: new Date() } : e,
-      ),
-    )
-
-    addNotification(`${student.name} выдано ${item.name}`, "success")
   }
 
   // Handle equipment return
-  const handleEquipmentReturn = (equipmentId: string) => {
-    const item = equipment.find((e) => e.id === equipmentId)
+  const handleEquipmentReturn = async (equipmentId: string) => {
+    try {
+      const item = equipment.find((e) => e.id === equipmentId);
+      
+      const response = await fetch(`/api/equipment/${equipmentId}?action=checkin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-    if (!item) {
-      addNotification("Оборудование не найдено", "error")
-      return
+      if (!response.ok) {
+        throw new Error('Failed to checkin equipment');
+      }
+
+      const updatedEquipment = await response.json();
+      
+      // Update local state
+      setEquipment(prev => 
+        prev.map(item => item.id === equipmentId ? updatedEquipment : item)
+      );
+
+      if (item) {
+        addNotification(`${item.name} возвращено`, "info");
+      }
+    } catch (error) {
+      console.error('Error returning equipment:', error);
+      addNotification("Ошибка при возврате оборудования", "error");
     }
-
-    if (item.status !== "checked-out") {
-      addNotification(`${item.name} не выдано`, "error")
-      return
-    }
-
-    const student = students.find((s) => s.id === item.checkedOutBy)
-
-    // Update equipment status
-    setEquipment(
-      equipment.map((e) =>
-        e.id === equipmentId ? { ...e, status: "available", checkedOutBy: null, checkedOutAt: null } : e,
-      ),
-    )
-
-    addNotification(`${student?.name || "Студент"} вернул ${item.name}`, "success")
   }
 
   // Toggle student access
-  const toggleStudentAccess = (studentId: string) => {
-    setStudents(students.map((s) => (s.id === studentId ? { ...s, hasAccess: !s.hasAccess } : s)))
+  const toggleStudentAccess = async (studentId: string) => {
+    try {
+      const student = students.find((s) => s.id === studentId);
+      if (!student) return;
+      
+      const action = student.hasAccess ? 'revoke' : 'grant';
+      
+      const response = await fetch(`/api/users/${studentId}?action=${action}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-    const student = students.find((s) => s.id === studentId)
-    if (student) {
-      addNotification(`Доступ ${!student.hasAccess ? "выдан для" : "запрещен для"} ${student.name}`, "info")
+      if (!response.ok) {
+        throw new Error(`Failed to ${action} access`);
+      }
+
+      const updatedStudent = await response.json();
+      
+      // Update local state
+      setStudents(prev => 
+        prev.map(s => s.id === studentId ? updatedStudent : s)
+      );
+
+      addNotification(
+        `Доступ ${updatedStudent.hasAccess ? "разрешен" : "запрещен"} для ${updatedStudent.name}`,
+        "info"
+      );
+    } catch (error) {
+      console.error('Error toggling student access:', error);
+      addNotification("Ошибка при изменении доступа", "error");
     }
   }
 
@@ -372,35 +423,80 @@ export default function EquipmentDashboard() {
     }));
   };
 
-  const handleAddEquipment = (e: React.FormEvent) => {
+  const handleAddEquipment = async (e: React.FormEvent) => {
     e.preventDefault();
-    setEquipment((prev) => [...prev, { ...newEquipment, id: `eq-${prev.length + 1}` }]); // Generate a new ID
-    setNewEquipment({
-      id: "",
-      name: "",
-      status: "available",
-      checkedOutBy: null,
-      checkedOutAt: null,
-      group: "",
-      owner: "",
-      location: "",
-      room: 0,
-      building: 0,
-      lab: 0,
-    }); // Reset the form
-    setIsAddPanelOpen(false); // Close the panel after adding
-  };
+    
+    try {
+      const response = await fetch('/api/equipment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newEquipment),
+      });
 
-  const handleAddStudent = (studentData: Omit<Student, "id">) => {
-    const newId = `st-${String(students.length + 1).padStart(3, '0')}`;
-    const newStudent: Student = {
-      id: newId,
-      ...studentData
-    };
+      if (!response.ok) {
+        throw new Error('Failed to add equipment');
+      }
 
-    setStudents([...students, newStudent]);
-    addNotification(`Студент ${studentData.name} добавлен в систему`, "success");
-  };
+      const createdEquipment = await response.json();
+      
+      // Update local state
+      setEquipment(prev => [...prev, createdEquipment]);
+      
+      // Reset form and close panel
+      setNewEquipment({
+        id: "",
+        name: "",
+        nameEn: "",
+        type: "",
+        status: "available",
+        location: "",
+        lastMaintenance: "",
+        nextMaintenance: "",
+        qrCode: "",
+        checkedOutBy: null,
+        checkedOutAt: null,
+        group: "",
+        owner: "",
+        room: 0,
+        building: 0,
+        lab: 0,
+      });
+      setIsAddPanelOpen(false);
+      
+      addNotification(`Оборудование ${createdEquipment.name} добавлено`, "success");
+    } catch (error) {
+      console.error('Error adding equipment:', error);
+      addNotification("Ошибка при добавлении оборудования", "error");
+    }
+  }
+
+  const handleAddStudent = async (studentData: Omit<Student, "id">) => {
+    try {
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(studentData),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to add student');
+      }
+
+      const createdStudent = await response.json();
+      
+      // Update local state
+      setStudents(prev => [...prev, createdStudent]);
+      
+      addNotification(`Студент ${createdStudent.name} добавлен`, "success");
+    } catch (error) {
+      console.error('Error adding student:', error);
+      addNotification("Ошибка при добавлении студента", "error");
+    }
+  }
 
   return (
     <NotificationProvider>

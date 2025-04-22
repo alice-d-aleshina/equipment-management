@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -13,114 +13,101 @@ import CardReaderSimulator from "@/components/card-reader/card-reader-simulator"
 import { useEquipment } from "@/lib/hooks/useEquipment"
 import { useStudents } from "@/lib/hooks/useStudents"
 import { useCardReader } from "@/lib/hooks/useCardReader"
+import { Equipment, Student } from "@/lib/types"
 
 export default function EquipmentPage() {
-  const [readerActive, setReaderActive] = useState(true)
-  const [searchTerm, setSearchTerm] = useState("")
-  
-  const { equipment, loading: equipmentLoading, checkoutEquipment, returnEquipment } = useEquipment()
-  const { students, loading: studentsLoading } = useStudents()
-  const { scanCard } = useCardReader({
-    onSuccess: (userId) => {
-      // Handle successful card scan
-    },
-  })
+  const [equipment, setEquipment] = useState<Equipment[]>([])
+  const [students, setStudents] = useState<Student[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const handleCardScan = (studentId: string) => {
-    scanCard(studentId)
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [equipmentData, studentsData] = await Promise.all([
+          fetch('/api/equipment').then(res => res.json()),
+          fetch('/api/students').then(res => res.json())
+        ])
+        setEquipment(equipmentData)
+        setStudents(studentsData)
+      } catch (error) {
+        console.error('Error fetching data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  const handleReturn = async (equipmentId: number) => {
+    try {
+      // TODO: Implement return API call
+      console.log('Return equipment:', equipmentId)
+      
+      // Оптимистичное обновление UI
+      setEquipment(equipment.map(item => 
+        item.id === equipmentId 
+          ? { ...item, status: 'available' as const, assignedTo: undefined }
+          : item
+      ))
+    } catch (error) {
+      console.error('Error returning equipment:', error)
+    }
   }
 
-  const handleCheckout = (studentId: string, equipmentId: string) => {
-    checkoutEquipment(equipmentId, studentId)
+  const handleCheckout = async (studentId: number, equipmentId: number) => {
+    try {
+      // TODO: Implement checkout API call
+      console.log('Checkout equipment:', equipmentId, 'to student:', studentId)
+      
+      // Оптимистичное обновление UI
+      const student = students.find(s => s.id === studentId)
+      if (student) {
+        setEquipment(equipment.map(item => 
+          item.id === equipmentId 
+            ? { ...item, status: 'in_use' as const, assignedTo: student.group }
+            : item
+        ))
+      }
+    } catch (error) {
+      console.error('Error checking out equipment:', error)
+    }
   }
 
-  const handleReturn = (equipmentId: string) => {
-    returnEquipment(equipmentId)
+  const handleAddEquipment = () => {
+    // TODO: Implement add equipment logic
+    console.log('Add equipment')
   }
 
-  const filteredEquipment = equipment.filter((item) =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.location.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const handleScanQR = () => {
+    // TODO: Implement QR scan logic
+    console.log('Scan QR')
+  }
 
-  const isLoading = equipmentLoading || studentsLoading
+  if (loading) {
+    return (
+      <div className="container mx-auto py-6">
+        <div className="flex justify-center items-center h-64">
+          <div className="text-lg">Загрузка...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="container mx-auto py-6">
-      <h1 className="text-3xl font-bold mb-6">Equipment Management</h1>
-      
-      <div className="grid gap-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Package className="h-5 w-5 text-muted-foreground" />
-            <h2 className="text-xl font-semibold">Equipment Dashboard</h2>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="reader-active" className="text-sm">Card Reader</Label>
-              <Switch
-                id="reader-active"
-                checked={readerActive}
-                onCheckedChange={setReaderActive}
-              />
-            </div>
-          </div>
-        </div>
-        
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Equipment Inventory</CardTitle>
-                  <Input
-                    placeholder="Search equipment..."
-                    className="max-w-sm"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-                <CardDescription>
-                  View and manage all equipment items in the inventory
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {isLoading ? (
-                  <div className="text-center py-8">Loading...</div>
-                ) : (
-                  <EquipmentList 
-                    equipment={filteredEquipment} 
-                    students={students}
-                    onReturn={handleReturn}
-                    onCheckout={handleCheckout}
-                  />
-                )}
-              </CardContent>
-            </Card>
-          </div>
-          
-          <div>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Scan className="h-5 w-5" />
-                  Card Reader Simulator
-                </CardTitle>
-                <CardDescription>Simulate student card scanning and equipment checkout</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <CardReaderSimulator
-                  students={students}
-                  equipment={equipment}
-                  onCardScan={handleCardScan}
-                  onCheckout={handleCheckout}
-                  isActive={readerActive}
-                />
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Управление оборудованием</h1>
       </div>
+      
+      <EquipmentList 
+        equipment={equipment}
+        students={students}
+        onReturn={handleReturn}
+        onCheckout={handleCheckout}
+        onAddEquipment={handleAddEquipment}
+        onScanQR={handleScanQR}
+      />
     </div>
   )
 } 
