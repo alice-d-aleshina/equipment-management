@@ -1,4 +1,4 @@
-import EquipmentDashboard from '@/components/equipment-dashboard';
+import EquipmentDashboard from '@/components/dashboard/equipment-dashboard';
 
 const HomePage = () => {
   return <EquipmentDashboard />;

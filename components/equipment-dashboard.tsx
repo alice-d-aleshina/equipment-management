@@ -61,7 +61,7 @@ const AddEquipmentPanel = ({ onClose, onSubmit, newEquipment, handleInputChange,
             <label className="block text-sm font-medium text-gray-700 mb-1">Название оборудования</label>
             <Input
               name="name"
-              placeholder="Например: Микроскоп"
+
               value={newEquipment.name}
               onChange={handleInputChange}
               required
@@ -399,7 +399,7 @@ export default function EquipmentDashboard() {
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="equipment">
                 <Package className="mr-2 h-4 w-4" />
-                Инвенторизация
+                инвентаризация
               </TabsTrigger>
               <TabsTrigger value="students">
                 <Users className="mr-2 h-4 w-4" />
@@ -412,7 +412,7 @@ export default function EquipmentDashboard() {
                 <CardHeader>
                   <div className="flex justify-between items-center">
                     <div>
-                      <CardTitle>Инвенторизация оборудоваания</CardTitle>
+                      <CardTitle>инвентаризация оборудоваания</CardTitle>
                       <CardDescription>Управление и отслеживание оборудлвания</CardDescription>
                     </div>
                     <Button 
