@@ -121,6 +121,10 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
   const [filterAccess, setFilterAccess] = useState<'all' | 'granted' | 'denied'>('all');
   const [isAddPanelOpen, setIsAddPanelOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [groupFilter, setGroupFilter] = useState<string>('all');
+
+  // Get unique groups from students
+  const studentGroups = ['all', ...Array.from(new Set(students.map(student => student.group)))];
 
   // Handle window resize
   useEffect(() => {
@@ -140,15 +144,16 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
     }
   };
 
-  // Filter students based on access and search query
+  // Filter students based on access, search query and group
   const filteredStudents = students.filter(student => {
     const matchesAccess = filterAccess === 'all' || 
                         (filterAccess === 'granted' && student.hasAccess) || 
                         (filterAccess === 'denied' && !student.hasAccess);
     const matchesSearch = searchQuery === '' || 
                         student.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesGroup = groupFilter === 'all' || student.group === groupFilter;
     
-    return matchesAccess && matchesSearch;
+    return matchesAccess && matchesSearch && matchesGroup;
   });
 
   // Mobile view
@@ -193,15 +198,32 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
             </Button>
           </div>
 
-          <div className="relative mt-2">
+          <div className="space-y-2">
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="Поиск по ФИО студента..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 w-full"
+              />
+            </div>
             
-            <Input
-              type="text"
-              placeholder="Поиск по ФИО студента..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 w-full"
-            />
+            <Select 
+              value={groupFilter} 
+              onValueChange={setGroupFilter}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Фильтр по группе" />
+              </SelectTrigger>
+              <SelectContent>
+                {studentGroups.map((group) => (
+                  <SelectItem key={group} value={group}>
+                    {group === 'all' ? 'Все группы' : group}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         
@@ -307,15 +329,32 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
           </Button>
         </div>
 
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
-          <Input
-            type="text"
-            placeholder="Поиск по ФИО студента..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 w-[300px]"
-          />
+        <div className="flex gap-4">
+          <div className="relative">
+            <Input
+              type="text"
+              placeholder="Поиск по ФИО студента..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 w-[300px]"
+            />
+          </div>
+          
+          <Select 
+            value={groupFilter} 
+            onValueChange={setGroupFilter}
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Фильтр по группе" />
+            </SelectTrigger>
+            <SelectContent>
+              {studentGroups.map((group) => (
+                <SelectItem key={group} value={group}>
+                  {group === 'all' ? 'Все группы' : group}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
       {filteredStudents.length === 0 ? (
