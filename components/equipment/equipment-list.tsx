@@ -54,6 +54,7 @@ export default function EquipmentList({
   const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'in_use' | 'maintenance' | 'broken'>('all');
   const [selectedStudents, setSelectedStudents] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
 
   useEffect(() => {
     setIsClient(true)
@@ -233,15 +234,31 @@ export default function EquipmentList({
                           <SelectValue placeholder="Выберите студента" />
                         </SelectTrigger>
                         <SelectContent>
-                          {students.map((student) => (
-                            <SelectItem 
-                              key={student.id} 
-                              value={student.id}
-                              disabled={!student.hasAccess}
-                            >
-                              {student.name} ({student.group}) {!student.hasAccess && '- Нет доступа'}
-                            </SelectItem>
-                          ))}
+                          <div className="p-2">
+                            <Input
+                              type="text"
+                              placeholder="Поиск..."
+                              value={studentSearchQuery}
+                              onChange={(e) => setStudentSearchQuery(e.target.value)}
+                              className="mb-2"
+                            />
+                          </div>
+                          {students
+                            .filter(student => 
+                              student.hasAccess && 
+                              (studentSearchQuery === "" || 
+                                student.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                                student.group.toLowerCase().includes(studentSearchQuery.toLowerCase())
+                              )
+                            )
+                            .map((student) => (
+                              <SelectItem 
+                                key={student.id} 
+                                value={student.id}
+                              >
+                                {student.name} ({student.group})
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                       {selectedStudents[item.id] && (
