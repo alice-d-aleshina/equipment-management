@@ -162,4 +162,19 @@ export const fetchRoomsByLab = async (labId: number): Promise<Room[]> => {
     console.error('Error fetching rooms by lab:', error);
     return [];
   }
+};
+
+// Search equipment by name
+export const searchEquipment = async (name: string): Promise<Equipment[]> => {
+  try {
+    const response = await fetch(`/api/equipment?name=${encodeURIComponent(name)}`);
+    if (!response.ok) {
+      throw new Error('Failed to search equipment');
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error searching equipment:', error);
+    return [];
+  }
 }; 

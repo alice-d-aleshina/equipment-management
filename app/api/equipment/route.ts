@@ -5,7 +5,8 @@ import {
   createEquipment, 
   updateEquipment,
   checkoutEquipment,
-  checkinEquipment
+  checkinEquipment,
+  searchEquipmentByName
 } from '@/utils/equipmentService';
 import { mapEquipmentToFrontend } from '@/lib/api';
 
@@ -148,6 +149,14 @@ export async function GET(request: Request) {
     const buildingId = searchParams.get('building_id');
     const labId = searchParams.get('lab_id');
     const groupName = searchParams.get('group_name');
+    const nameQuery = searchParams.get('name');
+    
+    // If name search is provided, use the dedicated search function
+    if (nameQuery) {
+      const data = await searchEquipmentByName(nameQuery);
+      const mappedData = data.map(mapEquipmentToFrontend);
+      return NextResponse.json(mappedData);
+    }
     
     const filters: any = {};
     if (status) filters.status = status;

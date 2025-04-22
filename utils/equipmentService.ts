@@ -163,4 +163,21 @@ export async function checkinEquipment(equipmentId: number) {
   }
   
   return data[0];
+}
+
+/**
+ * Search equipment by name
+ */
+export async function searchEquipmentByName(query: string) {
+  const { data, error } = await supabase
+    .from('equipment')
+    .select('*')
+    .ilike('name', `%${query}%`)
+    .order('name');
+  
+  if (error) {
+    throw new Error(`Error searching equipment by name: ${error.message}`);
+  }
+  
+  return data;
 } 

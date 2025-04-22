@@ -53,13 +53,19 @@ export default function EquipmentList({
   const [isClient, setIsClient] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'in_use' | 'maintenance' | 'broken'>('all');
   const [selectedStudents, setSelectedStudents] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     setIsClient(true)
   }, [])
 
   const filteredEquipment = equipment.filter(item => {
-    return filterStatus === 'all' || item.status === filterStatus;
+    const matchesStatus = filterStatus === 'all' || item.status === filterStatus;
+    const matchesSearch = searchQuery === '' || 
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      item.nameEn.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    return matchesStatus && matchesSearch;
   });
 
   const handleStudentSelect = (equipmentId: string, studentId: string) => {
@@ -158,6 +164,17 @@ export default function EquipmentList({
               <SelectItem value="broken">Сломано</SelectItem>
             </SelectContent>
           </Select>
+          
+          <div className="relative">
+            
+            <Input
+              type="text"
+              placeholder="Поиск по названию..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 w-[250px]"
+            />
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {onScanQR && (
