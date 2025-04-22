@@ -120,6 +120,7 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
   const [showMobileView, setShowMobileView] = useState(window.innerWidth < 768);
   const [filterAccess, setFilterAccess] = useState<'all' | 'granted' | 'denied'>('all');
   const [isAddPanelOpen, setIsAddPanelOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Handle window resize
   useEffect(() => {
@@ -139,11 +140,15 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
     }
   };
 
-  // Filter students based on access
+  // Filter students based on access and search query
   const filteredStudents = students.filter(student => {
-    if (filterAccess === 'all') return true;
-    if (filterAccess === 'granted') return student.hasAccess;
-    return !student.hasAccess;
+    const matchesAccess = filterAccess === 'all' || 
+                        (filterAccess === 'granted' && student.hasAccess) || 
+                        (filterAccess === 'denied' && !student.hasAccess);
+    const matchesSearch = searchQuery === '' || 
+                        student.name.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    return matchesAccess && matchesSearch;
   });
 
   // Mobile view
@@ -186,6 +191,17 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
             >
               <UserPlus className="h-4 w-4" />
             </Button>
+          </div>
+
+          <div className="relative mt-2">
+            
+            <Input
+              type="text"
+              placeholder="Поиск по ФИО студента..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 w-full"
+            />
           </div>
         </div>
         
@@ -252,7 +268,7 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
   return (
     <div className="bg-white">
       <div className="border-b border-gray-200 p-4">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 mb-4">
           <div className="flex gap-2">
             <Button 
               size="sm" 
@@ -289,6 +305,17 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
             <UserPlus className="mr-1 h-4 w-4" />
             Добавить студента
           </Button>
+        </div>
+
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+          <Input
+            type="text"
+            placeholder="Поиск по ФИО студента..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 w-[300px]"
+          />
         </div>
       </div>
       {filteredStudents.length === 0 ? (
