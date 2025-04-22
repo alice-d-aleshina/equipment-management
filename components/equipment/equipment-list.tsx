@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle, XCircle, RotateCcw, Package2, Filter, Search, ArrowDownToLine, ArrowUpFromLine, Package, Users, Plus, Scan, CheckCircle2, Clock, AlertTriangle, Wrench } from "lucide-react"
 import { formatDate } from "@/lib/utils"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
 interface Equipment {
   id: string;
@@ -55,6 +56,17 @@ export default function EquipmentList({
   const [selectedStudents, setSelectedStudents] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [openSelectIds, setOpenSelectIds] = useState<Record<string, boolean>>({});
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Функция для программного фокуса на поле поиска
+  const focusSearchInput = () => {
+    if (searchInputRef.current) {
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 10);
+    }
+  };
 
   useEffect(() => {
     setIsClient(true)
@@ -226,14 +238,15 @@ export default function EquipmentList({
                 <TableCell>
                   {item.status === 'available' ? (
                     <div className="flex items-center gap-2">
-                      <Select 
-                        value={selectedStudents[item.id] || ""} 
-                        onValueChange={(value) => handleStudentSelect(item.id, value)}
-                      >
-                        <SelectTrigger className="w-[200px]">
-                          <SelectValue placeholder="Выберите студента" />
-                        </SelectTrigger>
-                        <SelectContent>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-[200px] justify-start">
+                            {selectedStudents[item.id] 
+                              ? getStudentName(selectedStudents[item.id]) 
+                              : "Выберите студента"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[220px] p-0" align="start">
                           <div className="p-2">
                             <Input
                               type="text"
@@ -241,26 +254,34 @@ export default function EquipmentList({
                               value={studentSearchQuery}
                               onChange={(e) => setStudentSearchQuery(e.target.value)}
                               className="mb-2"
+                              autoFocus
                             />
                           </div>
-                          {students
-                            .filter(student => 
-                              student.hasAccess && 
-                              (studentSearchQuery === "" || 
-                                student.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
-                                student.group.toLowerCase().includes(studentSearchQuery.toLowerCase())
+                          <div className="max-h-[200px] overflow-y-auto">
+                            {students
+                              .filter(student => 
+                                student.hasAccess && 
+                                (studentSearchQuery === "" || 
+                                  student.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                                  student.group.toLowerCase().includes(studentSearchQuery.toLowerCase())
+                                )
                               )
-                            )
-                            .map((student) => (
-                              <SelectItem 
-                                key={student.id} 
-                                value={student.id}
-                              >
-                                {student.name} ({student.group})
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
+                              .map((student) => (
+                                <div
+                                  key={student.id}
+                                  className="flex items-center px-2 py-1.5 cursor-pointer hover:bg-gray-100"
+                                  onClick={() => {
+                                    handleStudentSelect(item.id, student.id);
+                                    setStudentSearchQuery('');
+                                    document.body.click(); // Закрыть попап
+                                  }}
+                                >
+                                  {student.name} ({student.group})
+                                </div>
+                              ))}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                       {selectedStudents[item.id] && (
                         <Button onClick={() => handleConfirmCheckout(item.id)} size="sm" className="bg-green-500 hover:bg-green-600">
                           <ArrowUpFromLine className="h-4 w-4 mr-2" />
