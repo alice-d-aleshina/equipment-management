@@ -218,6 +218,7 @@ export default function EquipmentDashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [deviceIsMobile, setDeviceIsMobile] = useState<boolean>(false);
   const [isSimulatingScanning, setIsSimulatingScanning] = useState<boolean>(false);
+  const [cameraPermissionRequested, setCameraPermissionRequested] = useState<boolean>(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -251,7 +252,7 @@ export default function EquipmentDashboard() {
     fetchData();
   }, []);
 
-  // Определяем, является ли устройство мобильным
+  // Определяем, является ли устройство мобильным и запрашиваем разрешение на камеру
   useEffect(() => {
     const checkIfMobile = () => {
       const userAgent = navigator.userAgent.toLowerCase();
@@ -260,7 +261,48 @@ export default function EquipmentDashboard() {
     };
     
     checkIfMobile();
-  }, []);
+
+    // Запрашиваем разрешение на камеру при загрузке приложения
+    if (!cameraPermissionRequested) {
+      requestCameraPermission();
+    }
+  }, [cameraPermissionRequested]);
+
+  // Функция для запроса разрешения на камеру
+  const requestCameraPermission = () => {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: "environment" 
+        }, 
+        audio: false 
+      })
+      .then(function(stream) {
+        console.log("Доступ к камере получен при загрузке приложения");
+        // Закрываем поток, так как он будет использован позже при сканировании
+        stream.getTracks().forEach(track => track.stop());
+        // Отмечаем, что разрешение запрошено
+        setCameraPermissionRequested(true);
+      })
+      .catch(function(err) {
+        console.error("Ошибка доступа к камере при загрузке приложения:", err);
+        setCameraPermissionRequested(true); // Отмечаем, что попытка была совершена
+        
+        let errorMessage = "Произошла ошибка при запросе доступа к камере";
+        
+        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+          const isAndroid = /Android/i.test(navigator.userAgent);
+          if (isAndroid) {
+            errorMessage = "Для корректной работы приложения необходим доступ к камере. На Android: откройте настройки браузера, найдите разрешения сайтов, найдите этот сайт и разрешите доступ к камере.";
+          } else {
+            errorMessage = "Для корректной работы приложения необходим доступ к камере. Пожалуйста, разрешите доступ к камере в настройках вашего браузера.";
+          }
+          
+          addNotification(errorMessage, "info");
+        }
+      });
+    }
+  };
 
   // Add a notification
   const addNotification = (message: string, type: "success" | "error" | "info") => {
@@ -463,8 +505,13 @@ export default function EquipmentDashboard() {
     let errorMessage = "Ошибка при доступе к камере";
     
     if (err instanceof Error) {
-      if (err.name === "NotAllowedError") {
-        errorMessage = "Доступ к камере был запрещен. Пожалуйста, разрешите доступ к камере в настройках вашего браузера.";
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        const isAndroid = /Android/i.test(navigator.userAgent);
+        if (isAndroid) {
+          errorMessage = "Доступ к камере был запрещен. На Android: откройте настройки браузера, найдите разрешения сайтов, найдите этот сайт и разрешите доступ к камере.";
+        } else {
+          errorMessage = "Доступ к камере был запрещен. Пожалуйста, разрешите доступ к камере в настройках вашего браузера.";
+        }
       } else if (err.name === "NotFoundError") {
         errorMessage = "Камера не найдена. Пожалуйста, убедитесь, что ваше устройство имеет камеру.";
       } else if (err.name === "NotReadableError") {
@@ -697,20 +744,43 @@ export default function EquipmentDashboard() {
     if (deviceIsMobile) {
       setScanMode("camera");
       
-      // На мобильных устройствах важно сначала спросить разрешение на использование камеры
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            facingMode: "environment"  // Использовать заднюю камеру на мобильных устройствах
-          } 
-        })
-        .then(function(stream) {
-          console.log("Доступ к камере получен");
-        })
-        .catch(function(err) {
-          console.error("Ошибка доступа к камере:", err);
-          setScannerError("Пожалуйста, дайте разрешение на доступ к камере");
-        });
+      // Проверяем, было ли уже запрошено разрешение на камеру
+      if (!cameraPermissionRequested) {
+        // Если разрешение не запрашивалось ранее, запросим его сейчас
+        requestCameraPermission();
+      } else {
+        // Если разрешение уже запрашивалось, повторно запросим для подстраховки
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              facingMode: "environment"  // Использовать заднюю камеру на мобильных устройствах
+            },
+            audio: false
+          })
+          .then(function(stream) {
+            console.log("Доступ к камере получен");
+            // Закрываем поток камеры, так как он будет открыт компонентом Scanner
+            stream.getTracks().forEach(track => track.stop());
+          })
+          .catch(function(err) {
+            console.error("Ошибка доступа к камере:", err);
+            let errorMessage = "Ошибка доступа к камере";
+            
+            if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+              errorMessage = "Доступ к камере был запрещен. Пожалуйста, разрешите доступ к камере в настройках вашего браузера.";
+              
+              // Специальные инструкции для Android
+              const isAndroid = /Android/i.test(navigator.userAgent);
+              if (isAndroid) {
+                errorMessage = "Доступ к камере был запрещен. На Android: откройте настройки браузера, найдите разрешения сайтов, найдите этот сайт и разрешите доступ к камере.";
+              }
+            }
+            
+            setScannerError(errorMessage);
+          });
+        } else {
+          setScannerError("Ваш браузер не поддерживает API камеры. Пожалуйста, используйте современный браузер.");
+        }
       }
     }
   };
@@ -718,6 +788,25 @@ export default function EquipmentDashboard() {
   return (
     <NotificationProvider>
       <div className="min-h-screen bg-gray-50">
+        {/* Баннер с запросом разрешения на камеру */}
+        {!cameraPermissionRequested && (
+          <div className="fixed top-0 left-0 right-0 bg-blue-500 text-white p-4 z-50">
+            <div className="container mx-auto flex items-center justify-between">
+              <div className="flex-1">
+                <p className="font-medium">Для работы приложения требуется доступ к камере</p>
+                <p className="text-sm opacity-90">Пожалуйста, разрешите доступ к камере в диалоговом окне</p>
+              </div>
+              <Button 
+                variant="outline" 
+                className="ml-4 bg-white/20 hover:bg-white/30 text-white border-white/40"
+                onClick={requestCameraPermission}
+              >
+                Разрешить
+              </Button>
+            </div>
+          </div>
+        )}
+        
         <div className="container mx-auto py-4 sm:py-6 px-3 sm:px-4">
           <header className="mb-4 sm:mb-8">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Система управления оборудованием</h1>
