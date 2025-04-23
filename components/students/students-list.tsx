@@ -23,6 +23,16 @@ const AddStudentPanel = ({
     group: "",
     hasAccess: false
   });
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -45,15 +55,15 @@ const AddStudentPanel = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-800">Добавить студента</h2>
-          <Button variant="ghost" size="icon" onClick={onClose}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3">
+      <div className="bg-white rounded-xl shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Добавить студента</h2>
+          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full h-8 w-8">
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">ФИО студента</Label>
             <Input
@@ -62,7 +72,7 @@ const AddStudentPanel = ({
               value={newStudent.name}
               onChange={handleInputChange}
               placeholder="Иванов Иван Иванович"
-              className="w-full"
+              className="w-full h-10 rounded-xl"
               required
             />
           </div>
@@ -75,7 +85,7 @@ const AddStudentPanel = ({
               value={newStudent.group}
               onChange={handleInputChange}
               placeholder="CS-101"
-              className="w-full"
+              className="w-full h-10 rounded-xl"
               required
             />
           </div>
@@ -86,7 +96,7 @@ const AddStudentPanel = ({
               onValueChange={handleAccessChange} 
               defaultValue="no"
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-full h-10 rounded-xl">
                 <SelectValue placeholder="Выберите статус доступа" />
               </SelectTrigger>
               <SelectContent>
@@ -96,11 +106,19 @@ const AddStudentPanel = ({
             </Select>
           </div>
           
-          <div className="pt-4 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>
+          <div className="pt-4 flex flex-col sm:flex-row sm:justify-end gap-2">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={onClose}
+              className={isMobile ? "w-full rounded-xl" : "rounded-xl"}
+            >
               Отмена
             </Button>
-            <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
+            <Button 
+              type="submit" 
+              className={`bg-blue-600 hover:bg-blue-700 rounded-xl ${isMobile ? "w-full" : ""}`}
+            >
               Добавить
             </Button>
           </div>
@@ -160,14 +178,18 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
   if (showMobileView) {
     return (
       <div className="bg-white">
-        <div className="border-b border-gray-200 p-4">
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex gap-2 flex-1">
+        <div className="border-b border-gray-200 p-3">
+          <div className="flex justify-between items-center mb-3">
+            <div className="flex gap-1 flex-1">
               <Button 
                 size="sm" 
                 variant={filterAccess === 'all' ? 'default' : 'outline'}
                 onClick={() => setFilterAccess('all')}
-                className="flex-1"
+                className={`flex-1 text-sm font-medium rounded-xl focus:outline-none focus-visible:ring-0 ${
+                  filterAccess === 'all' 
+                    ? 'bg-gray-900 text-white' 
+                    : 'bg-gray-50 text-gray-600 hover:text-gray-800'
+                }`}
               >
                 Все
               </Button>
@@ -175,37 +197,47 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
                 size="sm" 
                 variant={filterAccess === 'granted' ? 'default' : 'outline'}
                 onClick={() => setFilterAccess('granted')}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                className={`flex-1 text-sm font-medium rounded-xl focus:outline-none focus-visible:ring-0 ${
+                  filterAccess === 'granted' 
+                    ? 'bg-green-600 hover:bg-green-700 text-white' 
+                    : 'bg-gray-50 text-gray-600 hover:text-gray-800 border border-green-200'
+                }`}
               >
-                Доступ разрешен
+                <CheckCircle className="mr-1 h-3 w-3" />
+                Разрешен
               </Button>
               <Button 
                 size="sm" 
                 variant={filterAccess === 'denied' ? 'default' : 'outline'}
                 onClick={() => setFilterAccess('denied')}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                className={`flex-1 text-sm font-medium rounded-xl focus:outline-none focus-visible:ring-0 ${
+                  filterAccess === 'denied' 
+                    ? 'bg-red-600 hover:bg-red-700 text-white' 
+                    : 'bg-gray-50 text-gray-600 hover:text-gray-800 border border-red-200'
+                }`}
               >
-                Доступ запрещен
+                <XCircle className="mr-1 h-3 w-3" />
+                Запрещен
               </Button>
             </div>
             <Button 
               size="sm" 
               variant="outline" 
-              className="text-blue-600 ml-2"
+              className="text-blue-600 ml-2 h-9 w-9 p-0 flex items-center justify-center rounded-full focus:outline-none focus-visible:ring-0"
               onClick={() => setIsAddPanelOpen(true)}
             >
               <UserPlus className="h-4 w-4" />
             </Button>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="relative">
               <Input
                 type="text"
                 placeholder="Поиск по ФИО студента..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 w-full"
+                className="pl-3 w-full h-10 rounded-xl"
               />
             </div>
             
@@ -213,7 +245,7 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
               value={groupFilter} 
               onValueChange={setGroupFilter}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="w-full h-10 rounded-xl">
                 <SelectValue placeholder="Фильтр по группе" />
               </SelectTrigger>
               <SelectContent>
@@ -238,7 +270,7 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
         ) : (
           <div className="divide-y divide-gray-100">
             {filteredStudents.map((student) => (
-              <div key={student.id} className="p-4">
+              <div key={student.id} className="p-3">
                 <div className="flex items-start gap-3">
                   <Avatar className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600">
                     {student.name.charAt(0)}
@@ -246,7 +278,7 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <p className="font-medium text-gray-900 truncate">{student.name}</p>
-                      <Badge className={`${student.hasAccess ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      <Badge className={`${student.hasAccess ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} rounded-xl`}>
                         {student.hasAccess ? "Разрешено" : "Запрещено"}
                       </Badge>
                     </div>
@@ -254,15 +286,14 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
                       <p>ID: {student.id}</p>
                       <p>Группа: {student.group}</p>
                     </div>
-                    <div className="mt-3 flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-700">Доступ к оборудованию</span>
+                    <div className="mt-3">
                       <Button
                         size="sm"
                         variant="outline"
-                        className={`${
+                        className={`w-full ${
                           student.hasAccess 
-                            ? 'border-red-200 text-red-600 hover:bg-red-50' 
-                            : 'border-green-200 text-green-600 hover:bg-green-50'
+                            ? 'border-red-200 text-red-600 hover:bg-red-50 rounded-xl' 
+                            : 'border-green-200 text-green-600 hover:bg-green-50 rounded-xl'
                         }`}
                         onClick={() => onToggleAccess(student.id)}
                       >
@@ -296,6 +327,7 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
               size="sm" 
               variant={filterAccess === 'all' ? 'default' : 'outline'}
               onClick={() => setFilterAccess('all')}
+              className="focus:outline-none focus-visible:ring-0"
             >
               Все студенты
             </Button>
@@ -303,7 +335,7 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
               size="sm" 
               variant={filterAccess === 'granted' ? 'default' : 'outline'}
               onClick={() => setFilterAccess('granted')}
-              className="bg-green-600 hover:bg-green-700 text-white"
+              className="bg-green-600 hover:bg-green-700 text-white focus:outline-none focus-visible:ring-0"
             >
               <CheckCircle className="mr-1 h-4 w-4" />
               Доступ разрешен
@@ -312,7 +344,7 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
               size="sm" 
               variant={filterAccess === 'denied' ? 'default' : 'outline'}
               onClick={() => setFilterAccess('denied')}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="bg-red-600 hover:bg-red-700 text-white focus:outline-none focus-visible:ring-0"
             >
               <XCircle className="mr-1 h-4 w-4" />
               Доступ запрещен
@@ -321,7 +353,7 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
           <Button 
             size="sm" 
             variant="outline" 
-            className="text-blue-600"
+            className="text-blue-600 focus:outline-none focus-visible:ring-0"
             onClick={() => setIsAddPanelOpen(true)}
           >
             <UserPlus className="mr-1 h-4 w-4" />

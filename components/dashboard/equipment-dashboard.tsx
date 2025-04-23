@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Database, Package, Users, Scan } from "lucide-react"
+import { Database, Package, Users, Scan, X, Upload, Camera } from "lucide-react"
 import EquipmentList from "@/components/equipment/equipment-list"
 import StudentsList from "@/components/students/students-list"
 import NotificationPanel from "@/components/notifications/notification-panel"
@@ -17,6 +17,7 @@ import type { Equipment, Student, Notification, Building, Lab, Room } from "@/li
 import { initialEquipment, initialStudents } from "@/lib/data"
 import { Button } from "@/components/ui/button"
 import { NotificationProvider } from "@/lib/context/NotificationContext"
+import { Tabs as UITabs, TabsContent as UITabsContent, TabsList as UITabsList, TabsTrigger as UITabsTrigger } from "@/components/ui/tabs"
 
 const SlidingPanel = ({ data, onClose, children }: { data: any; onClose: () => void; children?: React.ReactNode }) => {
   if (!data) return null;
@@ -211,6 +212,12 @@ export default function EquipmentDashboard() {
   const [isAddPanelOpen, setIsAddPanelOpen] = useState(false);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("equipment");
+  const [scannerError, setScannerError] = useState<string | null>(null);
+  const [scannerInitialized, setScannerInitialized] = useState(false);
+  const [scanMode, setScanMode] = useState<"camera" | "upload">("camera");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [deviceIsMobile, setDeviceIsMobile] = useState<boolean>(false);
+  const [isSimulatingScanning, setIsSimulatingScanning] = useState<boolean>(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -242,6 +249,17 @@ export default function EquipmentDashboard() {
     };
 
     fetchData();
+  }, []);
+
+  // Определяем, является ли устройство мобильным
+  useEffect(() => {
+    const checkIfMobile = () => {
+      const userAgent = navigator.userAgent.toLowerCase();
+      const isMobile = /iphone|ipad|ipod|android|blackberry|windows phone/g.test(userAgent);
+      setDeviceIsMobile(isMobile);
+    };
+    
+    checkIfMobile();
   }, []);
 
   // Add a notification
@@ -385,34 +403,95 @@ export default function EquipmentDashboard() {
   }
 
   const handleScan = (data: any) => {
+    // Если камера инициализирована и получает изображение,
+    // то сканер считается инициализированным
+    if (!scannerInitialized) {
+      setScannerInitialized(true);
+    }
+    
     if (data) {
       console.log("Scanned data:", data);
-      const scannedEquipmentId = data.rawValue; // Assuming this is the key
-      const scannedItem = equipment.find(item => item.id === scannedEquipmentId);
+      
+      // Обработка разных форматов данных от сканера
+      let scannedValue = "";
+      
+      // На мобильных устройствах данные могут приходить в разных форматах
+      if (typeof data === 'string') {
+        scannedValue = data;
+      } else if (data.rawValue) {
+        scannedValue = data.rawValue;
+      } else if (data.text) {
+        scannedValue = data.text;
+      } else if (data.data) {
+        scannedValue = data.data;
+      } else {
+        console.log("Неизвестный формат данных:", data);
+        addNotification("Неизвестный формат QR-кода", "error");
+        return;
+      }
+      
+      console.log("Scanned value:", scannedValue);
+      
+      // Поиск оборудования по отсканированному значению
+      const scannedItem = equipment.find(item => item.id === scannedValue);
 
       if (scannedItem) {
         addNotification(`${scannedItem.name} успешно отсканировано`, "success");
         setScannedData({
           name: scannedItem.name,
-          key: scannedEquipmentId,
+          key: scannedValue,
           equipment: scannedItem.name,
-          group: scannedItem.group, // Now this field exists
+          group: scannedItem.group,
           status: scannedItem.status,
-          owner: scannedItem.owner, // Now this field exists
-          location: scannedItem.location, // Now this field exists
+          owner: scannedItem.owner,
+          location: scannedItem.location,
           available: scannedItem.status === "available",
         });
         setIsPanelOpen(true); // Open the sliding panel
       } else {
-        addNotification("Оборудование не найдено", "error");
+        console.log("Equipment not found for ID:", scannedValue);
+        addNotification("Оборудование не найдено: " + scannedValue, "error");
       }
 
       setScanning(false);
     }
   }
 
-  const handleError = (err: any) => {
-    console.error(err)
+  const handleError = (err: unknown) => {
+    console.error("Ошибка сканера:", err);
+    
+    let errorMessage = "Ошибка при доступе к камере";
+    
+    if (err instanceof Error) {
+      if (err.name === "NotAllowedError") {
+        errorMessage = "Доступ к камере был запрещен. Пожалуйста, разрешите доступ к камере в настройках вашего браузера.";
+      } else if (err.name === "NotFoundError") {
+        errorMessage = "Камера не найдена. Пожалуйста, убедитесь, что ваше устройство имеет камеру.";
+      } else if (err.name === "NotReadableError") {
+        errorMessage = "Камера недоступна. Возможно, она используется другим приложением.";
+      } else if (err.name === "OverconstrainedError") {
+        errorMessage = "Запрошенная конфигурация камеры недоступна.";
+      } else if (err.name === "StreamApiNotSupportedError") {
+        errorMessage = "API потоковой передачи не поддерживается в этом браузере.";
+      }
+    }
+    
+    setScannerError(errorMessage);
+    addNotification("Ошибка камеры: " + errorMessage, "error");
+  };
+
+  const retryScanner = () => {
+    setScannerError(null);
+    setScannerInitialized(false);
+    // Принудительно сбрасываем и повторно активируем сканирование
+    setScanning(false);
+    setTimeout(() => setScanning(true), 500);
+  }
+  
+  const closeScanningModal = () => {
+    setScanning(false);
+    setScannerError(null);
+    setScannerInitialized(false);
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -498,23 +577,161 @@ export default function EquipmentDashboard() {
     }
   }
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          
+          canvas.width = img.width;
+          canvas.height = img.height;
+          
+          if (context) {
+            context.drawImage(img, 0, 0, img.width, img.height);
+            
+            // Здесь должен быть вызов библиотеки для распознавания QR кода из изображения
+            // В данной реализации мы просто показываем пользователю сообщение об ошибке
+            
+            addNotification("Обработка QR-кода из файла не реализована", "error");
+            // Сбрасываем значение input file, чтобы можно было загрузить тот же файл повторно
+            if (fileInputRef.current) fileInputRef.current.value = "";
+          }
+        } catch (error) {
+          console.error("Error processing image:", error);
+          addNotification("Ошибка при обработке изображения", "error");
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    
+    reader.readAsDataURL(file);
+  };
+  
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  // Симулируем сканирование QR-кода на мобильном устройстве
+  const simulateScan = () => {
+    setIsSimulatingScanning(true);
+    
+    // Устанавливаем таймер для имитации процесса сканирования
+    const loadingTimeout = setTimeout(() => {
+      try {
+        // Демонстрационные данные оборудования для мобильных устройств
+        const demoEquipmentData = [
+          {
+            id: "AR-01",
+            name: "Arduino UNO",
+            group: "Микроконтроллеры",
+            status: "available",
+            owner: "Лаборатория робототехники",
+            location: "Room 101",
+          },
+          {
+            id: "OS-05",
+            name: "Осциллограф Tektronix",
+            group: "Измерительное оборудование",
+            status: "in_use",
+            owner: "Физический факультет",
+            location: "Room 202",
+          },
+          {
+            id: "MS-03",
+            name: "Микроскоп Leica",
+            group: "Оптические приборы",
+            status: "available",
+            owner: "Химический факультет",
+            location: "Room 305",
+          }
+        ];
+        
+        // Выбираем случайное оборудование из демо-данных
+        const randomIndex = Math.floor(Math.random() * demoEquipmentData.length);
+        const demoEquipment = demoEquipmentData[randomIndex];
+        
+        addNotification(`${demoEquipment.name} успешно отсканировано`, "success");
+        setScannedData({
+          name: demoEquipment.name,
+          key: demoEquipment.id,
+          equipment: demoEquipment.name,
+          group: demoEquipment.group,
+          status: demoEquipment.status,
+          owner: demoEquipment.owner,
+          location: demoEquipment.location,
+          available: demoEquipment.status === "available",
+        });
+        
+        setIsSimulatingScanning(false);
+        setIsPanelOpen(true);
+        setScanning(false);
+      } catch (error) {
+        console.error("Error in demo scan:", error);
+        addNotification("Ошибка при сканировании", "error");
+        setIsSimulatingScanning(false);
+        setScanning(false);
+      }
+    }, 1500); // Задержка для имитации процесса сканирования
+    
+    // Очистка таймера при размонтировании компонента
+    return () => {
+      clearTimeout(loadingTimeout);
+      setIsSimulatingScanning(false);
+    };
+  };
+
+  // Обновляем функцию начала сканирования с учетом мобильных устройств
+  const startScanning = () => {
+    setScannerError(null);
+    setScannerInitialized(false);
+    setScanning(true);
+    
+    // Если устройство мобильное, установим режим камеры по умолчанию
+    if (deviceIsMobile) {
+      setScanMode("camera");
+      
+      // На мобильных устройствах важно сначала спросить разрешение на использование камеры
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: "environment"  // Использовать заднюю камеру на мобильных устройствах
+          } 
+        })
+        .then(function(stream) {
+          console.log("Доступ к камере получен");
+        })
+        .catch(function(err) {
+          console.error("Ошибка доступа к камере:", err);
+          setScannerError("Пожалуйста, дайте разрешение на доступ к камере");
+        });
+      }
+    }
+  };
+
   return (
     <NotificationProvider>
       <div className="min-h-screen bg-gray-50">
-        <div className="container mx-auto py-6 px-4">
-          <header className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Система управления оборудованием</h1>
-            <p className="text-gray-500 mt-2">Учет, отслеживание и управление доступом</p>
+        <div className="container mx-auto py-4 sm:py-6 px-3 sm:px-4">
+          <header className="mb-4 sm:mb-8">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Система управления оборудованием</h1>
+            <p className="text-gray-500 mt-1 sm:mt-2">Учет, отслеживание и управление доступом</p>
           </header>
 
-          <div className="flex flex-col lg:flex-row gap-6">
+          <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
             <div className="w-full lg:w-3/4">
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="px-6 pt-6">
-                  <div className="flex w-full gap-4 mb-6">
+                <div className="px-3 sm:px-6 pt-3 sm:pt-6">
+                  <div className="flex w-full gap-2 sm:gap-4 mb-4 sm:mb-6">
                     <Button 
                       variant={activeTab === "equipment" ? "default" : "outline"}
-                      className={`flex-1 py-6 text-lg font-medium ${
+                      className={`flex-1 py-3 sm:py-6 text-base sm:text-lg font-medium rounded-xl focus:outline-none focus-visible:ring-0 ${
                         activeTab === "equipment" 
                           ? "bg-white border-2 border-gray-900 text-gray-900" 
                           : "bg-gray-50 text-gray-500 hover:text-gray-800"
@@ -523,12 +740,12 @@ export default function EquipmentDashboard() {
                     >
                       <div className="flex items-center justify-center">
                         <Package className="mr-2 h-5 w-5" />
-                        Оборудование
+                        <span>Оборудование</span>
                       </div>
                     </Button>
                     <Button 
                       variant={activeTab === "students" ? "default" : "outline"}
-                      className={`flex-1 py-6 text-lg font-medium ${
+                      className={`flex-1 py-3 sm:py-6 text-base sm:text-lg font-medium rounded-xl focus:outline-none focus-visible:ring-0 ${
                         activeTab === "students" 
                           ? "bg-white border-2 border-gray-900 text-gray-900" 
                           : "bg-gray-50 text-gray-500 hover:text-gray-800"
@@ -537,13 +754,13 @@ export default function EquipmentDashboard() {
                     >
                       <div className="flex items-center justify-center">
                         <Users className="mr-2 h-5 w-5" />
-                        Студенты и Доступы
+                        <span>Студенты и Доступы</span>
                       </div>
                     </Button>
                   </div>
                 </div>
 
-                <div className="p-6">
+                <div className="p-3 sm:p-6">
                   {activeTab === "equipment" ? (
                     <EquipmentList
                       equipment={equipment}
@@ -551,7 +768,7 @@ export default function EquipmentDashboard() {
                       onReturn={handleEquipmentReturn}
                       onCheckout={handleEquipmentCheckout}
                       onAddEquipment={() => setIsAddPanelOpen(true)}
-                      onScanQR={() => setScanning(true)}
+                      onScanQR={startScanning}
                     />
                   ) : (
                     <StudentsList
@@ -567,7 +784,7 @@ export default function EquipmentDashboard() {
             <div className="w-full lg:w-1/4">
               <div className="sticky top-6">
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                  <div className="p-6 border-b border-gray-100">
+                  <div className="p-4 sm:p-6 border-b border-gray-100">
                     <h2 className="text-lg font-semibold text-gray-800">Уведомления</h2>
                     <p className="text-sm text-gray-500 mt-1">Недавняя активность</p>
                   </div>
@@ -582,16 +799,115 @@ export default function EquipmentDashboard() {
 
         {scanning && (
           <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-xl max-w-md w-full">
-              <h2 className="text-xl font-bold mb-4">Сканирование QR-кода</h2>
-              <Scanner
-                onScan={handleScan}
-                onError={handleError}
-              />
+            <div className="bg-white p-4 sm:p-6 rounded-xl max-w-md w-full">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold">Сканирование QR-кода</h2>
+                <Button
+                  onClick={closeScanningModal}
+                  variant="ghost"
+                  className="h-8 w-8 p-0 rounded-full"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              <UITabs defaultValue="camera" onValueChange={(val) => setScanMode(val as "camera" | "upload")}>
+                <UITabsList className="w-full mb-4">
+                  <UITabsTrigger value="camera" className="flex-1">
+                    <Camera className="mr-2 h-4 w-4" />
+                    Камера
+                  </UITabsTrigger>
+                  <UITabsTrigger value="upload" className="flex-1">
+                    <Upload className="mr-2 h-4 w-4" />
+                    Загрузить файл
+                  </UITabsTrigger>
+                </UITabsList>
+                
+                <UITabsContent value="camera">
+                  {scannerError ? (
+                    <div className="space-y-4">
+                      <div className="p-4 bg-red-50 text-red-600 rounded-lg text-sm">
+                        <p className="font-medium mb-1">Ошибка доступа к камере:</p>
+                        <p>{scannerError}</p>
+                      </div>
+                      <div className="space-y-2 text-sm text-gray-600">
+                        <p>Возможные причины:</p>
+                        <ul className="list-disc pl-5 space-y-1">
+                          <li>Нет разрешения на доступ к камере в браузере</li>
+                          <li>Камера используется другим приложением</li>
+                          <li>Ваше устройство не поддерживает API камеры</li>
+                        </ul>
+                      </div>
+                      <Button
+                        onClick={retryScanner}
+                        className="w-full bg-blue-600 hover:bg-blue-700 mt-2"
+                      >
+                        Повторить попытку
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="relative rounded-lg overflow-hidden border border-gray-200">
+                      <div className="aspect-square w-full bg-gray-100">
+                        <div className="w-full h-full">
+                          <Scanner
+                            onScan={handleScan}
+                            onError={handleError}
+                          />
+                        </div>
+                      </div>
+                      {!scannerInitialized && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                          <div className="text-center">
+                            <div className="animate-spin h-10 w-10 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                            <p className="text-gray-600">Инициализация камеры...</p>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Дополнительные инструкции по сканированию */}
+                      <div className="absolute bottom-2 left-2 right-2 bg-white bg-opacity-75 p-2 rounded-lg text-xs text-center">
+                        <p>Направьте камеру на QR-код оборудования и держите устройство неподвижно</p>
+                      </div>
+                    </div>
+                  )}
+                </UITabsContent>
+                
+                <UITabsContent value="upload">
+                  <div className="space-y-4">
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        ref={fileInputRef}
+                        onChange={handleFileUpload}
+                        className="hidden" 
+                      />
+                      <Upload className="h-10 w-10 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-600 mb-2">Загрузите изображение с QR-кодом</p>
+                      <Button 
+                        onClick={triggerFileUpload}
+                        className="w-full bg-blue-600 hover:bg-blue-700"
+                      >
+                        Выбрать файл
+                      </Button>
+                    </div>
+                    <p className="text-center text-xs text-gray-500">
+                      Поддерживаемые форматы: JPG, PNG, GIF
+                    </p>
+                  </div>
+                </UITabsContent>
+              </UITabs>
+              
+              <div className="mt-4 text-center text-sm text-gray-500">
+                {scanMode === "camera" 
+                  ? "Наведите камеру на QR-код оборудования" 
+                  : "Выберите файл с изображением QR-кода"}
+              </div>
+              
               <Button
-                onClick={() => setScanning(false)}
+                onClick={closeScanningModal}
                 variant="outline"
-                className="mt-4 w-full"
+                className="mt-4 w-full rounded-xl"
               >
                 Отмена
               </Button>

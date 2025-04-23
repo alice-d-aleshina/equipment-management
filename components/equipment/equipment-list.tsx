@@ -9,6 +9,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 
 interface Equipment {
   id: string;
@@ -52,6 +53,7 @@ export default function EquipmentList({
   onScanQR
 }: EquipmentListProps) {
   const [isClient, setIsClient] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'in_use' | 'maintenance' | 'broken'>('all');
   const [selectedStudents, setSelectedStudents] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -69,8 +71,22 @@ export default function EquipmentList({
   };
 
   useEffect(() => {
-    setIsClient(true)
-  }, [])
+    setIsClient(true);
+    
+    // Check if we're on mobile
+    const checkIfMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    // Initial check
+    checkIfMobile();
+    
+    // Add resize listener
+    window.addEventListener('resize', checkIfMobile);
+    
+    // Cleanup
+    return () => window.removeEventListener('resize', checkIfMobile);
+  }, []);
 
   const filteredEquipment = equipment.filter(item => {
     const matchesStatus = filterStatus === 'all' || item.status === filterStatus;
@@ -158,15 +174,114 @@ export default function EquipmentList({
     return null;
   }
 
+  // Mobile card view for equipment
+  const EquipmentCards = () => (
+    <div className="grid grid-cols-1 gap-4">
+      {filteredEquipment.map((item) => (
+        <Card key={item.id} className="overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex justify-between items-start">
+              <div>
+                <div>{item.name}</div>
+                <div className="text-sm text-gray-500">{item.nameEn}</div>
+              </div>
+              <Badge className={getStatusColor(item.status)}>
+                <span className="flex items-center gap-1">
+                  {getStatusIcon(item.status)}
+                  {getStatusText(item.status)}
+                </span>
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pb-2">
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="text-gray-500">Тип:</div>
+              <div>{item.type}</div>
+              <div className="text-gray-500">Владелец:</div>
+              <div>{getStudentName(item.checkedOutBy)}</div>
+              <div className="text-gray-500">Место:</div>
+              <div>{item.location}</div>
+            </div>
+          </CardContent>
+          <CardFooter className="pt-2 flex flex-col">
+            {item.status === 'available' ? (
+              <div className="flex flex-col w-full gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start">
+                      {selectedStudents[item.id] 
+                        ? getStudentName(selectedStudents[item.id]) 
+                        : "Выберите студента"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[220px] p-0" align="start">
+                    <div className="p-2">
+                      <Input
+                        type="text"
+                        placeholder="Поиск..."
+                        value={studentSearchQuery}
+                        onChange={(e) => setStudentSearchQuery(e.target.value)}
+                        className="mb-2"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="max-h-[200px] overflow-y-auto">
+                      {students
+                        .filter(student => 
+                          student.hasAccess && 
+                          (studentSearchQuery === "" || 
+                            student.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                            student.group.toLowerCase().includes(studentSearchQuery.toLowerCase())
+                          )
+                        )
+                        .map((student) => (
+                          <div
+                            key={student.id}
+                            className="flex items-center px-2 py-1.5 cursor-pointer hover:bg-gray-100"
+                            onClick={() => {
+                              handleStudentSelect(item.id, student.id);
+                              setStudentSearchQuery('');
+                              document.body.click(); // Закрыть попап
+                            }}
+                          >
+                            {student.name} ({student.group})
+                          </div>
+                        ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                {selectedStudents[item.id] && (
+                  <Button onClick={() => handleConfirmCheckout(item.id)} className="bg-green-500 hover:bg-green-600 w-full">
+                    <ArrowUpFromLine className="h-4 w-4 mr-2" />
+                    Выдать
+                  </Button>
+                )}
+              </div>
+            ) : (item.status === 'in_use' || item.status === 'checked-out') ? (
+              <Button onClick={() => onReturn(item.id)} variant="outline" className="border-blue-200 text-blue-600 hover:bg-blue-50 w-full">
+                <ArrowDownToLine className="h-4 w-4 mr-2" />
+                Вернуть
+              </Button>
+            ) : (
+              <Button disabled variant="outline" className="w-full">
+                {item.status === 'maintenance' ? 'На обслуживании' : 'Недоступно'}
+              </Button>
+            )}
+          </CardFooter>
+        </Card>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
           <Select 
             value={filterStatus} 
             onValueChange={(value: 'all' | 'available' | 'in_use' | 'maintenance' | 'broken') => setFilterStatus(value)}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full md:w-[180px]">
               <SelectValue placeholder="Статус" />
             </SelectTrigger>
             <SelectContent>
@@ -178,26 +293,25 @@ export default function EquipmentList({
             </SelectContent>
           </Select>
           
-          <div className="relative">
-            
+          <div className="relative w-full md:w-auto">
             <Input
               type="text"
               placeholder="Поиск по названию..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 w-[250px]"
+              className="pl-2 w-full md:w-[250px]"
             />
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {onScanQR && (
-            <Button onClick={onScanQR} variant="outline">
+            <Button onClick={onScanQR} variant="outline" className="w-full md:w-auto">
               <Scan className="h-4 w-4 mr-2" />
               Сканировать QR
             </Button>
           )}
           {onAddEquipment && (
-            <Button onClick={onAddEquipment}>
+            <Button onClick={onAddEquipment} className="w-full md:w-auto">
               <Plus className="h-4 w-4 mr-2" />
               Добавить оборудование
             </Button>
@@ -205,106 +319,110 @@ export default function EquipmentList({
         </div>
       </div>
 
-      <div className="border rounded-lg">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Название</TableHead>
-              <TableHead>Тип</TableHead>
-              <TableHead>Владелец</TableHead>
-              <TableHead>Место</TableHead>
-              <TableHead>Статус</TableHead>
-              <TableHead>Действия</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredEquipment.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell className="font-medium">
-                  <div>{item.name}</div>
-                  <div className="text-sm text-gray-500">{item.nameEn}</div>
-                </TableCell>
-                <TableCell>{item.type}</TableCell>
-                <TableCell>{getStudentName(item.checkedOutBy)}</TableCell>
-                <TableCell>{item.location}</TableCell>
-                <TableCell>
-                  <Badge className={getStatusColor(item.status)}>
-                    <span className="flex items-center gap-1">
-                      {getStatusIcon(item.status)}
-                      {getStatusText(item.status)}
-                    </span>
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  {item.status === 'available' ? (
-                    <div className="flex items-center gap-2">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" className="w-[200px] justify-start">
-                            {selectedStudents[item.id] 
-                              ? getStudentName(selectedStudents[item.id]) 
-                              : "Выберите студента"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[220px] p-0" align="start">
-                          <div className="p-2">
-                            <Input
-                              type="text"
-                              placeholder="Поиск..."
-                              value={studentSearchQuery}
-                              onChange={(e) => setStudentSearchQuery(e.target.value)}
-                              className="mb-2"
-                              autoFocus
-                            />
-                          </div>
-                          <div className="max-h-[200px] overflow-y-auto">
-                            {students
-                              .filter(student => 
-                                student.hasAccess && 
-                                (studentSearchQuery === "" || 
-                                  student.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
-                                  student.group.toLowerCase().includes(studentSearchQuery.toLowerCase())
-                                )
-                              )
-                              .map((student) => (
-                                <div
-                                  key={student.id}
-                                  className="flex items-center px-2 py-1.5 cursor-pointer hover:bg-gray-100"
-                                  onClick={() => {
-                                    handleStudentSelect(item.id, student.id);
-                                    setStudentSearchQuery('');
-                                    document.body.click(); // Закрыть попап
-                                  }}
-                                >
-                                  {student.name} ({student.group})
-                                </div>
-                              ))}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                      {selectedStudents[item.id] && (
-                        <Button onClick={() => handleConfirmCheckout(item.id)} size="sm" className="bg-green-500 hover:bg-green-600">
-                          <ArrowUpFromLine className="h-4 w-4 mr-2" />
-                          Выдать
-                        </Button>
-                      )}
-                    </div>
-                  ) : (item.status === 'in_use' || item.status === 'checked-out') ? (
-                    <Button onClick={() => onReturn(item.id)} variant="outline" size="sm" className="border-blue-200 text-blue-600 hover:bg-blue-50">
-                      <ArrowDownToLine className="h-4 w-4 mr-2" />
-                      Вернуть
-                    </Button>
-                  ) : (
-                    <Button disabled variant="outline" size="sm">
-                      {item.status === 'maintenance' ? 'На обслуживании' : 'Недоступно'}
-                    </Button>
-                  )}
-                </TableCell>
+      {isMobile ? (
+        <EquipmentCards />
+      ) : (
+        <div className="border rounded-lg overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Название</TableHead>
+                <TableHead>Тип</TableHead>
+                <TableHead>Владелец</TableHead>
+                <TableHead>Место</TableHead>
+                <TableHead>Статус</TableHead>
+                <TableHead>Действия</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+            </TableHeader>
+            <TableBody>
+              {filteredEquipment.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell className="font-medium">
+                    <div>{item.name}</div>
+                    <div className="text-sm text-gray-500">{item.nameEn}</div>
+                  </TableCell>
+                  <TableCell>{item.type}</TableCell>
+                  <TableCell>{getStudentName(item.checkedOutBy)}</TableCell>
+                  <TableCell>{item.location}</TableCell>
+                  <TableCell>
+                    <Badge className={getStatusColor(item.status)}>
+                      <span className="flex items-center gap-1">
+                        {getStatusIcon(item.status)}
+                        {getStatusText(item.status)}
+                      </span>
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {item.status === 'available' ? (
+                      <div className="flex items-center gap-2">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-[200px] justify-start">
+                              {selectedStudents[item.id] 
+                                ? getStudentName(selectedStudents[item.id]) 
+                                : "Выберите студента"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[220px] p-0" align="start">
+                            <div className="p-2">
+                              <Input
+                                type="text"
+                                placeholder="Поиск..."
+                                value={studentSearchQuery}
+                                onChange={(e) => setStudentSearchQuery(e.target.value)}
+                                className="mb-2"
+                                autoFocus
+                              />
+                            </div>
+                            <div className="max-h-[200px] overflow-y-auto">
+                              {students
+                                .filter(student => 
+                                  student.hasAccess && 
+                                  (studentSearchQuery === "" || 
+                                    student.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                                    student.group.toLowerCase().includes(studentSearchQuery.toLowerCase())
+                                  )
+                                )
+                                .map((student) => (
+                                  <div
+                                    key={student.id}
+                                    className="flex items-center px-2 py-1.5 cursor-pointer hover:bg-gray-100"
+                                    onClick={() => {
+                                      handleStudentSelect(item.id, student.id);
+                                      setStudentSearchQuery('');
+                                      document.body.click(); // Закрыть попап
+                                    }}
+                                  >
+                                    {student.name} ({student.group})
+                                  </div>
+                                ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                        {selectedStudents[item.id] && (
+                          <Button onClick={() => handleConfirmCheckout(item.id)} size="sm" className="bg-green-500 hover:bg-green-600">
+                            <ArrowUpFromLine className="h-4 w-4 mr-2" />
+                            Выдать
+                          </Button>
+                        )}
+                      </div>
+                    ) : (item.status === 'in_use' || item.status === 'checked-out') ? (
+                      <Button onClick={() => onReturn(item.id)} variant="outline" size="sm" className="border-blue-200 text-blue-600 hover:bg-blue-50">
+                        <ArrowDownToLine className="h-4 w-4 mr-2" />
+                        Вернуть
+                      </Button>
+                    ) : (
+                      <Button disabled variant="outline" size="sm">
+                        {item.status === 'maintenance' ? 'На обслуживании' : 'Недоступно'}
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }

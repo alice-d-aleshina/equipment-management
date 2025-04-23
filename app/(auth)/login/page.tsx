@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { searchEquipment } from "@/lib/api"
 import { Equipment } from "@/lib/types"
+import { Search } from "lucide-react"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -66,15 +67,20 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
-      <Card className="w-full max-w-md mb-6">
-        <CardHeader>
-          <CardTitle className="text-2xl">Поиск оборудования</CardTitle>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-3 sm:p-4 gap-4 sm:gap-6">
+      <div className="mb-0 sm:mb-2 w-full max-w-md text-center">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Система управления оборудованием</h1>
+        <p className="text-gray-500 mt-1 sm:mt-2">Учет, отслеживание и управление доступом</p>
+      </div>
+      
+      <Card className="w-full max-w-md shadow-sm border-gray-100 rounded-xl overflow-hidden">
+        <CardHeader className="px-4 py-3 sm:p-6">
+          <CardTitle className="text-xl">Поиск оборудования</CardTitle>
           <CardDescription>
             Найдите оборудование по названию
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 px-4 pb-4 sm:px-6 sm:pb-6">
           <div className="space-y-2">
             <Label htmlFor="search">Название оборудования</Label>
             <div className="flex gap-2">
@@ -84,19 +90,22 @@ export default function LoginPage() {
                 placeholder="Введите название..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-10 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
               />
               <Button 
                 onClick={handleSearch} 
                 disabled={isSearching || !searchQuery.trim()}
                 type="button"
+                className="rounded-xl focus:outline-none focus-visible:ring-0"
               >
-                {isSearching ? "Поиск..." : "Найти"}
+                <Search className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Найти</span>
               </Button>
             </div>
           </div>
           
           {searchResults.length > 0 && (
-            <div className="border rounded-md mt-4">
+            <div className="border rounded-xl mt-4 overflow-hidden">
               <div className="p-2 bg-gray-50 font-medium border-b">Результаты поиска</div>
               <div className="divide-y max-h-60 overflow-auto">
                 {searchResults.map((item) => (
@@ -126,17 +135,17 @@ export default function LoginPage() {
         </CardContent>
       </Card>
       
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-2xl">Вход</CardTitle>
+      <Card className="w-full max-w-md shadow-sm border-gray-100 rounded-xl overflow-hidden">
+        <CardHeader className="px-4 py-3 sm:p-6">
+          <CardTitle className="text-xl">Вход</CardTitle>
           <CardDescription>
-            Введите свои учетные данные для доступа к системе управления оборудованием
+            Введите свои учетные данные для доступа 
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 px-4 sm:px-6">
             {error && (
-              <div className="p-3 rounded-md bg-red-50 text-red-500 text-sm">
+              <div className="p-3 rounded-xl bg-red-50 text-red-500 text-sm">
                 {error}
               </div>
             )}
@@ -148,6 +157,7 @@ export default function LoginPage() {
                 placeholder="john.doe@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                className="h-10 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
                 required
               />
             </div>
@@ -158,15 +168,16 @@ export default function LoginPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                className="h-10 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
                 required
               />
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col space-y-2">
-            <Button type="submit" className="w-full" disabled={isLoading}>
+          <CardFooter className="flex flex-col space-y-2 pb-4 px-4 sm:px-6 sm:pb-6">
+            <Button type="submit" className="w-full h-10 rounded-xl focus:outline-none focus-visible:ring-0" disabled={isLoading}>
               {isLoading ? "Вход..." : "Войти"}
             </Button>
-            <p className="text-center text-sm text-gray-500">
+            <p className="text-center text-sm text-gray-500 mt-2">
               Нет учетной записи?{" "}
               <Link href="/register" className="text-blue-500 hover:underline">
                 Регистрация

@@ -86,7 +86,7 @@ export default function EquipmentPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto py-6">
+      <div className="w-full p-2 sm:p-4">
         <div className="flex justify-center items-center h-64">
           <div className="text-lg">Загрузка...</div>
         </div>
@@ -95,9 +95,9 @@ export default function EquipmentPage() {
   }
 
   return (
-    <div className="container mx-auto py-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Управление оборудованием</h1>
+    <div className="w-full">
+      <div className="flex flex-col gap-4 mb-4 sm:mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold">Управление оборудованием</h1>
       </div>
       
       <EquipmentList 
