@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Database, Package, Users, Scan, X, Upload, Camera } from "lucide-react"
+import { Database, Package, Users, Scan, X, Upload, Camera, BellOff, CheckCircle, AlertCircle, Info } from "lucide-react"
 import EquipmentList from "@/components/equipment/equipment-list"
 import StudentsList from "@/components/students/students-list"
 import NotificationPanel from "@/components/notifications/notification-panel"
@@ -16,8 +16,29 @@ import QRScanner from "@/components/qr-scanner/qr-scanner"
 import type { Equipment, Student, Notification, Building, Lab, Room } from "@/lib/types"
 import { initialEquipment, initialStudents } from "@/lib/data"
 import { Button } from "@/components/ui/button"
-import { NotificationProvider } from "@/lib/context/NotificationContext"
-import { Tabs as UITabs, TabsContent as UITabsContent, TabsList as UITabsList, TabsTrigger as UITabsTrigger } from "@/components/ui/tabs"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { io, Socket } from "socket.io-client"
+
+// Define interfaces for WebSocket data
+interface CardScanData {
+  cardId: string;
+  cardType: string;
+}
+
+interface StatusUpdateData {
+  status: string;
+}
+
+// Helper function to format dates
+const formatDate = (date: Date): string => {
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date(date));
+};
 
 const SlidingPanel = ({ data, onClose, children }: { data: any; onClose: () => void; children?: React.ReactNode }) => {
   if (!data) return null;
@@ -213,6 +234,8 @@ export default function EquipmentDashboard() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("equipment");
   const [deviceIsMobile, setDeviceIsMobile] = useState<boolean>(false);
+  const [lastScannedCardId, setLastScannedCardId] = useState<string>("");
+  const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -257,6 +280,33 @@ export default function EquipmentDashboard() {
     checkIfMobile();
   }, []);
 
+  // Connect to WebSocket server
+  useEffect(() => {
+    // Connect to the Arduino card reader server WebSocket
+    socketRef.current = io('http://localhost:3001');
+    
+    // Listen for card scan events
+    socketRef.current.on('card_scan', (data: CardScanData) => {
+      console.log('Card scanned:', data);
+      if (data.cardId) {
+        setLastScannedCardId(data.cardId);
+        handleCardScan(data.cardId);
+      }
+    });
+    
+    // Listen for status updates
+    socketRef.current.on('status_update', (data: StatusUpdateData) => {
+      console.log('Status update:', data);
+    });
+    
+    // Clean up on unmount
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, []);
+
   // Add a notification
   const addNotification = (message: string, type: "success" | "error" | "info") => {
     const newNotification: Notification = {
@@ -267,6 +317,18 @@ export default function EquipmentDashboard() {
       read: false,
     }
     setNotifications((prev) => [newNotification, ...prev])
+  }
+
+  // Mark all notifications as read
+  const markAllAsRead = () => {
+    setNotifications(prev => 
+      prev.map(notification => ({ ...notification, read: true }))
+    );
+  }
+
+  // Clear all notifications
+  const clearNotifications = () => {
+    setNotifications([]);
   }
 
   // Handle equipment checkout
@@ -371,27 +433,35 @@ export default function EquipmentDashboard() {
     }
   }
 
-  // Simulate card reader detection
-  const handleCardScan = (studentId: string) => {
-    if (!readerActive) {
-      addNotification("Считыватель недоступен", "error")
-      return
+  // Modified handleCardScan to update lastScannedCardId
+  const handleCardScan = (cardId: string) => {
+    if (!cardId) return;
+    
+    setLastScannedCardId(cardId);
+    
+    // Add notification showing the scanned card ID
+    addNotification(`Отсканирована карта: ${cardId}`, "info");
+    
+    // Find student with matching card ID
+    const matchingStudent = students.find(
+      (student) => student.card_id && student.card_id.toUpperCase() === cardId.toUpperCase()
+    );
+    
+    if (matchingStudent) {
+      // Student found
+      addNotification(`Карта верифицирована: ${matchingStudent.name} (ID: ${cardId})`, "success");
+      
+      // Check if student has access
+      if (!matchingStudent.hasAccess) {
+        addNotification(`Доступ запрещен для ${matchingStudent.name} (ID: ${cardId})`, "error");
+      } else {
+        addNotification(`Доступ разрешен для ${matchingStudent.name} (ID: ${cardId})`, "success");
+      }
+    } else {
+      // No matching student found
+      addNotification(`Карта не связана ни с одним студентом (ID: ${cardId})`, "error");
     }
-
-    const student = students.find((s) => s.id === studentId)
-
-    if (!student) {
-      addNotification("Неизвестная карта", "error")
-      return
-    }
-
-    if (!student.hasAccess) {
-      addNotification(`Доступ для ${student.name} запрещен`, "error")
-      return
-    }
-
-    addNotification(`${student.name} успешная авторизция`, "success")
-  }
+  };
 
   const handleScanNFC = () => {
     setScanning(true)
@@ -514,145 +584,188 @@ export default function EquipmentDashboard() {
   };
 
   return (
-    <NotificationProvider>
-      <div className="min-h-screen bg-gray-50">
-        <div className="container mx-auto py-4 sm:py-6 px-3 sm:px-4">
-          <header className="mb-4 sm:mb-8">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Система управления оборудованием</h1>
-            <p className="text-gray-500 mt-1 sm:mt-2">Учет, отслеживание и управление доступом</p>
-          </header>
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto py-4 sm:py-6 px-3 sm:px-4">
+        <header className="mb-4 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Система управления оборудованием</h1>
+          <p className="text-gray-500 mt-1 sm:mt-2">Учет, отслеживание и управление доступом</p>
+        </header>
 
-          <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
-            <div className="w-full lg:w-3/4">
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="px-3 sm:px-6 pt-3 sm:pt-6">
-                  <div className="flex w-full gap-2 sm:gap-4 mb-4 sm:mb-6">
-                    <Button 
-                      variant={activeTab === "equipment" ? "default" : "outline"}
-                      className={`flex-1 py-3 sm:py-6 text-base sm:text-lg font-medium rounded-xl focus:outline-none focus-visible:ring-0 ${
-                        activeTab === "equipment" 
-                          ? "bg-white border-2 border-gray-900 text-gray-900" 
-                          : "bg-gray-50 text-gray-500 hover:text-gray-800"
-                      }`}
-                      onClick={() => setActiveTab("equipment")}
-                    >
-                      <div className="flex items-center justify-center">
-                        <Package className="mr-2 h-5 w-5" />
-                        <span>Оборудование</span>
-                      </div>
-                    </Button>
-                    <Button 
-                      variant={activeTab === "students" ? "default" : "outline"}
-                      className={`flex-1 py-3 sm:py-6 text-base sm:text-lg font-medium rounded-xl focus:outline-none focus-visible:ring-0 ${
-                        activeTab === "students" 
-                          ? "bg-white border-2 border-gray-900 text-gray-900" 
-                          : "bg-gray-50 text-gray-500 hover:text-gray-800"
-                      }`}
-                      onClick={() => setActiveTab("students")}
-                    >
-                      <div className="flex items-center justify-center">
-                        <Users className="mr-2 h-5 w-5" />
-                        <span>Студенты и Доступы</span>
-                      </div>
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="p-3 sm:p-6">
-                  {activeTab === "equipment" ? (
-                    <EquipmentList
-                      equipment={equipment}
-                      students={students}
-                      onReturn={handleEquipmentReturn}
-                      onCheckout={handleEquipmentCheckout}
-                      onAddEquipment={() => setIsAddPanelOpen(true)}
-                      onScanQR={startScanning}
-                    />
-                  ) : (
-                    <StudentsList
-                      students={students}
-                      onToggleAccess={toggleStudentAccess}
-                      onAddStudent={handleAddStudent}
-                    />
-                  )}
+        <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
+          <div className="w-full lg:w-3/4">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-3 sm:px-6 pt-3 sm:pt-6">
+                <div className="flex w-full gap-2 sm:gap-4 mb-4 sm:mb-6">
+                  <Button 
+                    variant={activeTab === "equipment" ? "default" : "outline"}
+                    className={`flex-1 py-3 sm:py-6 text-base sm:text-lg font-medium rounded-xl focus:outline-none focus-visible:ring-0 ${
+                      activeTab === "equipment" 
+                        ? "bg-white border-2 border-gray-900 text-gray-900" 
+                        : "bg-gray-50 text-gray-500 hover:text-gray-800"
+                    }`}
+                    onClick={() => setActiveTab("equipment")}
+                  >
+                    <div className="flex items-center justify-center">
+                      <Package className="mr-2 h-5 w-5" />
+                      <span>Оборудование</span>
+                    </div>
+                  </Button>
+                  <Button 
+                    variant={activeTab === "students" ? "default" : "outline"}
+                    className={`flex-1 py-3 sm:py-6 text-base sm:text-lg font-medium rounded-xl focus:outline-none focus-visible:ring-0 ${
+                      activeTab === "students" 
+                        ? "bg-white border-2 border-gray-900 text-gray-900" 
+                        : "bg-gray-50 text-gray-500 hover:text-gray-800"
+                    }`}
+                    onClick={() => setActiveTab("students")}
+                  >
+                    <div className="flex items-center justify-center">
+                      <Users className="mr-2 h-5 w-5" />
+                      <span>Студенты и Доступы</span>
+                    </div>
+                  </Button>
                 </div>
               </div>
-            </div>
 
-            <div className="w-full lg:w-1/4">
-              <div className="sticky top-6">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                  <div className="p-4 sm:p-6 border-b border-gray-100">
-                    <h2 className="text-lg font-semibold text-gray-800">Уведомления</h2>
-                    <p className="text-sm text-gray-500 mt-1">Недавняя активность</p>
-                  </div>
-                  <div className="p-0">
-                    <NotificationPanel />
+              <div className="p-3 sm:p-6">
+                {activeTab === "equipment" ? (
+                  <EquipmentList
+                    equipment={equipment}
+                    students={students}
+                    onReturn={handleEquipmentReturn}
+                    onCheckout={handleEquipmentCheckout}
+                    onAddEquipment={() => setIsAddPanelOpen(true)}
+                    onScanQR={startScanning}
+                  />
+                ) : (
+                  <StudentsList
+                    students={students}
+                    onToggleAccess={toggleStudentAccess}
+                    onAddStudent={handleAddStudent}
+                    scannedCardId={lastScannedCardId}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="w-full lg:w-1/4">
+            <div className="sticky top-6">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="p-4 sm:p-6 border-b border-gray-100">
+                  <h2 className="text-lg font-semibold text-gray-800">Уведомления</h2>
+                  <p className="text-sm text-gray-500 mt-1">Недавняя активность</p>
+                </div>
+                <div className="p-0">
+                  <div className="flex flex-col h-full">
+                    {notifications.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-10 px-4 text-gray-500 h-[300px]">
+                        <BellOff className="h-12 w-12 mb-4 text-gray-300" />
+                        <h3 className="text-lg font-medium text-gray-900 mb-1">Нет уведомлений</h3>
+                        <p className="text-sm text-center">Здесь будут отображаться уведомления о действиях в системе</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between px-6 py-2 border-b border-gray-100">
+                          <span className="text-sm font-medium text-gray-500">
+                            {notifications.length} {notifications.length === 1 ? 'уведомление' : 'уведомлений'}
+                          </span>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-xs text-gray-500"
+                            onClick={clearNotifications}
+                          >
+                            Очистить все
+                          </Button>
+                        </div>
+                        <ScrollArea className="flex-1 h-[400px]">
+                          <div className="divide-y divide-gray-100">
+                            {notifications.map((notification) => (
+                              <div
+                                key={notification.id}
+                                className="flex items-start gap-3 p-4 hover:bg-gray-50"
+                              >
+                                <div className="shrink-0 mt-0.5">
+                                  {notification.type === "success" && <CheckCircle className="h-4 w-4 text-green-500" />}
+                                  {notification.type === "error" && <AlertCircle className="h-4 w-4 text-red-500" />}
+                                  {notification.type === "info" && <Info className="h-4 w-4 text-blue-500" />}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm text-gray-700">{notification.message}</p>
+                                  <p className="text-xs text-gray-500 mt-1">{formatDate(notification.timestamp)}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-
-        {scanning && (
-          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-            <QRScanner onScan={handleQRScan} onClose={closeScanningModal} />
-          </div>
-        )}
-
-        {isPanelOpen && (
-          <SlidingPanel data={scannedData} onClose={() => setIsPanelOpen(false)}>
-            <form className="space-y-4">
-              <div>
-                <Label>Имя:</Label>
-                <Input type="text" value={scannedData?.name} readOnly className="bg-gray-50" />
-              </div>
-              <div>
-                <Label>Ключ:</Label>
-                <Input type="text" value={scannedData?.key} readOnly className="bg-gray-50" />
-              </div>
-              <div>
-                <Label>Оборудование:</Label>
-                <Input type="text" value={scannedData?.equipment} readOnly className="bg-gray-50" />
-              </div>
-              <div>
-                <Label>Группа:</Label>
-                <Input type="text" value={scannedData?.group} readOnly className="bg-gray-50" />
-              </div>
-              <div>
-                <Label>Статус:</Label>
-                <Input type="text" value={scannedData?.status} readOnly className="bg-gray-50" />
-              </div>
-              <div>
-                <Label>Владелец:</Label>
-                <Input type="text" value={scannedData?.owner} readOnly className="bg-gray-50" />
-              </div>
-              <div>
-                <Label>Место:</Label>
-                <Input type="text" value={scannedData?.location} readOnly className="bg-gray-50" />
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch id="availability" checked={scannedData?.available} disabled />
-                <Label htmlFor="availability">Доступен</Label>
-              </div>
-            </form>
-          </SlidingPanel>
-        )}
-
-        {isAddPanelOpen && (
-          <AddEquipmentPanel
-            onClose={() => setIsAddPanelOpen(false)}
-            onSubmit={handleAddEquipment}
-            newEquipment={newEquipment}
-            handleInputChange={handleInputChange}
-            buildings={buildings}
-            labs={labs}
-            rooms={rooms}
-          />
-        )}
       </div>
-    </NotificationProvider>
+
+      {scanning && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+          <QRScanner onScan={handleQRScan} onClose={closeScanningModal} />
+        </div>
+      )}
+
+      {isPanelOpen && (
+        <SlidingPanel data={scannedData} onClose={() => setIsPanelOpen(false)}>
+          <form className="space-y-4">
+            <div>
+              <Label>Имя:</Label>
+              <Input type="text" value={scannedData?.name} readOnly className="bg-gray-50" />
+            </div>
+            <div>
+              <Label>Ключ:</Label>
+              <Input type="text" value={scannedData?.key} readOnly className="bg-gray-50" />
+            </div>
+            <div>
+              <Label>Оборудование:</Label>
+              <Input type="text" value={scannedData?.equipment} readOnly className="bg-gray-50" />
+            </div>
+            <div>
+              <Label>Группа:</Label>
+              <Input type="text" value={scannedData?.group} readOnly className="bg-gray-50" />
+            </div>
+            <div>
+              <Label>Статус:</Label>
+              <Input type="text" value={scannedData?.status} readOnly className="bg-gray-50" />
+            </div>
+            <div>
+              <Label>Владелец:</Label>
+              <Input type="text" value={scannedData?.owner} readOnly className="bg-gray-50" />
+            </div>
+            <div>
+              <Label>Место:</Label>
+              <Input type="text" value={scannedData?.location} readOnly className="bg-gray-50" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch id="availability" checked={scannedData?.available} disabled />
+              <Label htmlFor="availability">Доступен</Label>
+            </div>
+          </form>
+        </SlidingPanel>
+      )}
+
+      {isAddPanelOpen && (
+        <AddEquipmentPanel
+          onClose={() => setIsAddPanelOpen(false)}
+          onSubmit={handleAddEquipment}
+          newEquipment={newEquipment}
+          handleInputChange={handleInputChange}
+          buildings={buildings}
+          labs={labs}
+          rooms={rooms}
+        />
+      )}
+    </div>
   )
 }
 

@@ -13,11 +13,15 @@ const { SerialPort } = require('serialport');
 const { ReadlineParser } = require('@serialport/parser-readline');
 const express = require('express');
 const cors = require('cors');
+const axios = require('axios');
+const http = require('http');
+const { Server } = require('socket.io');
 
 // Настройки
 const DEFAULT_PORT = '/dev/cu.usbserial-1420';
 const SERIAL_BAUD_RATE = 115200;
 const SERVER_PORT = 3001;
+const BACKEND_URL = 'http://localhost:3000';
 
 // Глобальные переменные
 let serialPort = null;
@@ -28,6 +32,7 @@ let lastCardType = '';
 let cardPresent = false;
 let lastStatus = 'Disconnected';
 let lastConnectTime = null;
+let io = null;
 
 // Создание HTTP сервера
 const app = express();
@@ -38,6 +43,34 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
+
+// Создание HTTP сервера и WebSocket
+const server = http.createServer(app);
+io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS']
+  }
+});
+
+// WebSocket события
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+  
+  // Отправляем текущее состояние
+  socket.emit('status', {
+    connected,
+    status: lastStatus,
+    cardPresent,
+    cardId: lastCardId,
+    cardType: lastCardType
+  });
+  
+  // Обработка отключения клиента
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+});
 
 // Основная функция
 async function main() {
@@ -75,6 +108,12 @@ async function connectToPort(portName) {
         connected = true;
         lastStatus = 'Connected';
         lastConnectTime = new Date();
+        
+        // Уведомить всех клиентов о подключении
+        if (io) {
+          io.emit('connection_status', { connected: true });
+        }
+        
         resolve();
       });
       
@@ -82,12 +121,22 @@ async function connectToPort(portName) {
         console.error(`Serial port error: ${err.message}`);
         connected = false;
         lastStatus = `Error: ${err.message}`;
+        
+        // Уведомить всех клиентов об ошибке
+        if (io) {
+          io.emit('connection_status', { connected: false, error: err.message });
+        }
       });
       
       serialPort.on('close', () => {
         console.log('Connection closed');
         connected = false;
         lastStatus = 'Disconnected';
+        
+        // Уведомить всех клиентов о закрытии соединения
+        if (io) {
+          io.emit('connection_status', { connected: false });
+        }
       });
       
       // Обработка данных от Arduino
@@ -129,22 +178,34 @@ async function connectToPort(portName) {
                 lastCardId = cardId;
                 lastCardType = 'MIFARE 1K'; // Из предыдущего сообщения
                 lastStatus = `Card detected: ${lastCardId}`;
+                
+                // Отправляем данные карты через WebSocket
+                if (io) {
+                  io.emit('card_scan', { cardId: lastCardId, cardType: lastCardType });
+                }
+                
+                // Проверка карты в Supabase через бэкенд
+                verifyCardWithBackend(cardId);
               }
             }
             
-            // Простое сообщение, которое может быть UID
-            // например: "A1 B2 C3 D4" или просто "A1B2C3D4"
-            const hexMatches = message.match(/([0-9A-F]{2}[ :]?){4,}/i);
-            if (hexMatches) {
-              const cardId = hexMatches[0].replace(/[ :]/g, '').toUpperCase();
-              if (cardId.length >= 8) {  // Минимум 4 байта (8 символов в hex)
-                console.log(`Possible card ID detected: ${cardId}`);
-                
-                cardPresent = true;
-                lastCardId = cardId;
-                lastCardType = 'Unknown Type';
-                lastStatus = `Card detected: ${lastCardId}`;
+            // Проверка на возможный ID карты (например "A6860588")
+            if (message.match(/^[A-F0-9]{8,}$/i)) {
+              const cardId = message.toUpperCase();
+              console.log(`Possible card ID detected: ${cardId}`);
+              
+              cardPresent = true;
+              lastCardId = cardId;
+              lastCardType = 'Unknown Type';
+              lastStatus = `Card detected: ${lastCardId}`;
+              
+              // Отправляем данные карты через WebSocket
+              if (io) {
+                io.emit('card_scan', { cardId: lastCardId, cardType: lastCardType });
               }
+              
+              // Проверка карты в Supabase через бэкенд
+              verifyCardWithBackend(cardId);
             }
             
             // Проверяем формат из примера: "A 03"
@@ -193,11 +254,24 @@ function processArduinoMessage(message) {
     
     lastStatus = `Card detected: ${lastCardId}`;
     console.log(`Card detected: ${lastCardId} (${lastCardType})`);
+    
+    // Отправляем данные карты через WebSocket
+    if (io) {
+      io.emit('card_scan', { cardId: lastCardId, cardType: lastCardType });
+    }
+    
+    // Проверка карты в базе данных Supabase через бэкенд
+    verifyCardWithBackend(lastCardId);
   } 
   else if (message.type === 'status') {
     // Обработка статусного сообщения
     lastStatus = `${message.status}: ${message.message}`;
     console.log(`Status: ${lastStatus}`);
+    
+    // Отправляем статус через WebSocket
+    if (io) {
+      io.emit('status_update', { status: lastStatus });
+    }
   }
 }
 
@@ -263,6 +337,75 @@ function requestCardUID() {
     console.error(`Error requesting card UID: ${error.message}`);
     return false;
   }
+}
+
+// Функция для отправки данных карты на бэкенд
+function sendCardDataToBackend(cardId, cardType) {
+  if (!cardId) return;
+  
+  console.log(`Sending card data to backend: ${cardId} (${cardType})`);
+  
+  const cardData = {
+    cardId: cardId,
+    cardType: cardType,
+    timestamp: new Date().toISOString(),
+    source: 'arduino-reader'
+  };
+  
+  // Отправка HTTP запроса на бэкенд
+  axios.post(`${BACKEND_URL}/api/cards/scan`, cardData)
+    .then(response => {
+      console.log('Backend response:', response.data);
+    })
+    .catch(error => {
+      console.error('Error sending data to backend:', error.message);
+    });
+}
+
+// Функция для проверки карты через бэкенд с Supabase
+function verifyCardWithBackend(cardId) {
+  if (!cardId) return;
+  
+  console.log(`Verifying card in Supabase: ${cardId}`);
+  
+  // Отправка HTTP запроса на бэкенд для проверки карты
+  axios.post(`${BACKEND_URL}/api/auth/verify-card`, { card_id: cardId })
+    .then(response => {
+      if (response.data && response.data.success) {
+        // Карта найдена в базе данных
+        const user = response.data.user;
+        console.log('User found:', user);
+        lastStatus = `Verified: ${user.name || user.email || 'User #' + user.id}`;
+        
+        // Визуальная индикация успешной верификации (через Arduino)
+        sendCommandToArduino('led', { led: 'green', state: 1 });
+        setTimeout(() => {
+          sendCommandToArduino('led', { led: 'green', state: 0 });
+        }, 2000);
+        
+        // Здесь можно добавить код для доступа к оборудованию
+      } else {
+        // Карта не найдена
+        console.log('Card not found in database');
+        lastStatus = 'Access denied: Unknown card';
+        
+        // Визуальная индикация отказа
+        sendCommandToArduino('led', { led: 'red', state: 1 });
+        setTimeout(() => {
+          sendCommandToArduino('led', { led: 'red', state: 0 });
+        }, 2000);
+      }
+    })
+    .catch(error => {
+      console.error('Error verifying card:', error.message);
+      lastStatus = `Verification error: ${error.message}`;
+      
+      // Визуальная индикация ошибки
+      sendCommandToArduino('led', { led: 'red', state: 1 });
+      setTimeout(() => {
+        sendCommandToArduino('led', { led: 'red', state: 0 });
+      }, 2000);
+    });
 }
 
 // Запуск HTTP сервера
@@ -446,7 +589,7 @@ function startServer() {
   });
   
   // Запуск сервера
-  app.listen(SERVER_PORT, () => {
+  server.listen(SERVER_PORT, () => {
     console.log(`Arduino RFID Server running on http://localhost:${SERVER_PORT}`);
     console.log('API endpoints:');
     console.log('  GET  /api/status     - Get reader status');
@@ -457,6 +600,7 @@ function startServer() {
     console.log('  GET  /api/ports      - List available ports');
     console.log('  POST /api/request-uid - Request card UID');
     console.log('  POST /api/simulate-scan - Simulate a card scan');
+    console.log('WebSocket server is also running for real-time updates');
   });
 }
 

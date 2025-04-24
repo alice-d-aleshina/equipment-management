@@ -25,6 +25,7 @@ export interface Student {
   hasAccess: boolean
   email?: string
   phone?: string
+  card_id?: string  // ID карты для верификации
 }
 
 export interface Notification {

@@ -1,7 +1,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
-import { CheckCircle, XCircle, Search, Filter, UserPlus, X } from "lucide-react"
+import { CheckCircle, XCircle, Search, Filter, UserPlus, X, CreditCard } from "lucide-react"
 import type { Student } from "@/lib/types"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -132,17 +132,30 @@ interface StudentsListProps {
   students: Student[]
   onToggleAccess: (studentId: string) => void
   onAddStudent?: (student: Omit<Student, "id">) => void
+  scannedCardId?: string
 }
 
-export default function StudentsList({ students, onToggleAccess, onAddStudent }: StudentsListProps) {
+export default function StudentsList({ students, onToggleAccess, onAddStudent, scannedCardId }: StudentsListProps) {
   const [showMobileView, setShowMobileView] = useState(window.innerWidth < 768);
   const [filterAccess, setFilterAccess] = useState<'all' | 'granted' | 'denied'>('all');
   const [isAddPanelOpen, setIsAddPanelOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [groupFilter, setGroupFilter] = useState<string>('all');
+  const [studentsWithVerification, setStudentsWithVerification] = useState<(Student & { cardVerified: boolean })[]>([]);
 
   // Get unique groups from students
   const studentGroups = ['all', ...Array.from(new Set(students.map(student => student.group)))];
+
+  // Update students with verification status when scanned card changes
+  useEffect(() => {
+    const updatedStudents = students.map(student => ({
+      ...student,
+      cardVerified: student.card_id && scannedCardId 
+        ? student.card_id.toUpperCase() === scannedCardId.toUpperCase()
+        : false
+    }));
+    setStudentsWithVerification(updatedStudents);
+  }, [students, scannedCardId]);
 
   // Handle window resize
   useEffect(() => {
@@ -163,7 +176,7 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
   };
 
   // Filter students based on access, search query and group
-  const filteredStudents = students.filter(student => {
+  const filteredStudents = studentsWithVerification.filter(student => {
     const matchesAccess = filterAccess === 'all' || 
                         (filterAccess === 'granted' && student.hasAccess) || 
                         (filterAccess === 'denied' && !student.hasAccess);
@@ -178,6 +191,17 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
   if (showMobileView) {
     return (
       <div className="bg-white">
+        {scannedCardId && (
+          <div className="bg-blue-50 p-4 border-b border-blue-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-medium text-blue-800">Последняя отсканированная карта</h3>
+                <p className="text-lg font-bold text-blue-900 mt-1">{scannedCardId}</p>
+              </div>
+              <CreditCard className="h-8 w-8 text-blue-500" />
+            </div>
+          </div>
+        )}
         <div className="border-b border-gray-200 p-3">
           <div className="flex justify-between items-center mb-3">
             <div className="flex gap-1 flex-1">
@@ -285,6 +309,13 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
                     <div className="mt-1 text-sm text-gray-500">
                       <p>ID: {student.id}</p>
                       <p>Группа: {student.group}</p>
+                      <div className="flex items-center mt-1">
+                        <CreditCard className="h-3 w-3 mr-1" />
+                        {student.cardVerified 
+                          ? <span className="text-green-600 flex items-center"><CheckCircle className="h-3 w-3 mr-1" /> Верифицирована</span>
+                          : <span className="text-red-600 flex items-center"><XCircle className="h-3 w-3 mr-1" /> Не верифицирована</span>
+                        }
+                      </div>
                     </div>
                     <div className="mt-3">
                       <Button
@@ -320,6 +351,20 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
   // Desktop view
   return (
     <div className="bg-white">
+      {scannedCardId && (
+        <div className="bg-blue-50 p-6 mb-4 border border-blue-100 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium text-blue-800">Последняя отсканированная карта</h3>
+              <p className="text-2xl font-bold text-blue-900 mt-1">{scannedCardId}</p>
+              <p className="text-sm text-blue-600 mt-1">Карта отсканирована и готова к верификации</p>
+            </div>
+            <div className="bg-white p-4 rounded-full border border-blue-200">
+              <CreditCard className="h-10 w-10 text-blue-500" />
+            </div>
+          </div>
+        </div>
+      )}
       <div className="border-b border-gray-200 p-4">
         <div className="flex items-center justify-between gap-4 mb-4">
           <div className="flex gap-2">
@@ -405,6 +450,7 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
               <TableHead>ID</TableHead>
               <TableHead>Группа</TableHead>
               <TableHead className="text-center">Статус доступа</TableHead>
+              <TableHead className="text-center">Карта</TableHead>
               <TableHead className="text-center">Действия</TableHead>
             </TableRow>
           </TableHeader>
@@ -430,6 +476,19 @@ export default function StudentsList({ students, onToggleAccess, onAddStudent }:
                       : <XCircle className="mr-1 h-3 w-3" />
                     }
                     {student.hasAccess ? "Разрешено" : "Запрещено"}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-center">
+                  <Badge className={`inline-flex items-center ${
+                    student.cardVerified
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {student.cardVerified
+                      ? <CheckCircle className="mr-1 h-3 w-3" /> 
+                      : <XCircle className="mr-1 h-3 w-3" />
+                    }
+                    {student.cardVerified ? "Верифицирована" : "Не верифицирована"}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-center">

@@ -5,9 +5,17 @@ import { AlertCircle, CheckCircle, Info, BellOff, Bell } from "lucide-react"
 import { useNotifications } from "@/lib/context/NotificationContext"
 import { formatDate } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import type { Notification } from "@/lib/types"
 
-export default function NotificationPanel() {
-  const { notifications } = useNotifications()
+interface NotificationPanelProps {
+  notifications?: Notification[];
+}
+
+export default function NotificationPanel({ notifications: propsNotifications }: NotificationPanelProps) {
+  const { notifications: contextNotifications } = useNotifications()
+  
+  // Use props notifications if provided, otherwise use context notifications
+  const notifications = propsNotifications || contextNotifications || []
 
   const getIcon = (type: "success" | "error" | "info") => {
     switch (type) {
