@@ -1,122 +1,203 @@
 "use client"
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
-import { Package, Scan, CheckCircle } from "lucide-react"
+import React, { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { CreditCard, CheckCircle2, XCircle } from 'lucide-react';
 import type { Equipment, Student } from "@/lib/types"
 
 interface CardReaderSimulatorProps {
-  students: Student[]
-  equipment: Equipment[]
-  onCardScan: (studentId: string) => void
-  onCheckout: (studentId: string, equipmentId: string) => void
-  isActive: boolean
+  onCardDetected: (cardId: string) => void;
 }
 
-export default function CardReaderSimulator({
-  students,
-  equipment,
-  onCardScan,
-  onCheckout,
-  isActive,
-}: CardReaderSimulatorProps) {
-  const [selectedStudent, setSelectedStudent] = useState<string>("")
-  const [selectedEquipment, setSelectedEquipment] = useState<string>("")
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+/**
+ * Компонент для симуляции работы RFID-считывателя карт
+ * Позволяет тестировать функциональность без физического устройства
+ */
+const CardReaderSimulator: React.FC<CardReaderSimulatorProps> = ({ 
+  onCardDetected 
+}) => {
+  const [cardId, setCardId] = useState<string>('');
+  const [readerStatus, setReaderStatus] = useState<'ready' | 'scanning' | 'success' | 'error'>('ready');
+  const [lastScannedCard, setLastScannedCard] = useState<string>('');
+  const [statusMessage, setStatusMessage] = useState<string>('Считыватель готов к работе');
 
-  const handleCardScan = () => {
-    if (!selectedStudent) return
+  // Предустановленные ID карт для быстрого тестирования
+  const sampleCards = [
+    { id: '04A2B6D2CB5E80', label: 'Карта студента' },
+    { id: 'F13D89AC42E7B5', label: 'Карта преподавателя' },
+    { id: '7B349C2E8F15DA', label: 'Гостевая карта' },
+  ];
 
-    onCardScan(selectedStudent)
+  /**
+   * Симуляция сканирования ID карты
+   */
+  const simulateScan = (id: string = cardId) => {
+    // Проверка валидного ID карты
+    if (!id.trim()) {
+      setReaderStatus('error');
+      setStatusMessage('Введите ID карты для сканирования');
+      return;
+    }
 
-    const student = students.find((s) => s.id === selectedStudent)
-    setIsAuthenticated(student?.hasAccess || false)
-  }
+    // Начало процесса сканирования
+    setReaderStatus('scanning');
+    setStatusMessage('Сканирование карты...');
 
-  const handleCheckout = () => {
-    if (!selectedStudent || !selectedEquipment) return
-    onCheckout(selectedStudent, selectedEquipment)
-    setIsAuthenticated(false)
-    setSelectedStudent("")
-    setSelectedEquipment("")
-  }
+    // Имитация задержки чтения карты
+    setTimeout(() => {
+      try {
+        // Имитируем успешное сканирование
+        setReaderStatus('success');
+        setStatusMessage(`Карта успешно считана: ${id}`);
+        setLastScannedCard(id);
+        
+        // Отправляем результат в callback
+        onCardDetected(id);
+        
+        // После задержки возвращаем в состояние "готов"
+        setTimeout(() => {
+          setReaderStatus('ready');
+          setStatusMessage('Считыватель готов к работе');
+        }, 2000);
+      } catch (error) {
+        // Имитируем ошибку при сканировании
+        setReaderStatus('error');
+        setStatusMessage('Ошибка при сканировании карты');
+        
+        // После задержки возвращаем в состояние "готов"
+        setTimeout(() => {
+          setReaderStatus('ready');
+          setStatusMessage('Считыватель готов к работе');
+        }, 2000);
+      }
+    }, 1500); // Задержка для реалистичности
+  };
 
-  const availableEquipment = equipment.filter((e) => e.status === "available")
+  /**
+   * Выбор предустановленной карты
+   */
+  const selectSampleCard = (id: string) => {
+    setCardId(id);
+  };
+
+  // Установка цвета индикатора статуса
+  const getStatusColor = () => {
+    switch (readerStatus) {
+      case 'ready': return 'bg-blue-500';
+      case 'scanning': return 'bg-yellow-500';
+      case 'success': return 'bg-green-500';
+      case 'error': return 'bg-red-500';
+      default: return 'bg-gray-500';
+    }
+  };
 
   return (
-    <div className="container mx-auto py-6 px-4">
-      <div className="grid gap-6">
-        <div className="space-y-2">
-          <Label htmlFor="student-card">Студенческая карта</Label>
-          <div className="flex gap-2">
-            <Select value={selectedStudent} onValueChange={setSelectedStudent} disabled={!isActive}>
-              <SelectTrigger id="student-card" className="flex-1">
-                <SelectValue placeholder="Выбрать студента" />
-              </SelectTrigger>
-              <SelectContent>
-                {students.map((student) => (
-                  <SelectItem key={student.id} value={student.id}>
-                    {student.name} ({student.id})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button onClick={handleCardScan} disabled={!selectedStudent || !isActive}>
-              <Scan className="h-4 w-4 mr-2" />
-              Отсканиировать карту
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-xl">Симулятор RFID-считывателя</CardTitle>
+          <Badge className={`${getStatusColor()} text-white`}>
+            {readerStatus === 'ready' && 'Готов к работе'}
+            {readerStatus === 'scanning' && 'Сканирование...'}
+            {readerStatus === 'success' && 'Успешно'}
+            {readerStatus === 'error' && 'Ошибка'}
+          </Badge>
+        </div>
+        <CardDescription>
+          Виртуальный считыватель карт для тестирования
+        </CardDescription>
+      </CardHeader>
+      
+      <CardContent className="space-y-4">
+        <div className="flex items-center space-x-2">
+          <div className={`w-4 h-4 rounded-full ${getStatusColor()} animate-pulse`}></div>
+          <p className="text-sm text-gray-600">{statusMessage}</p>
+        </div>
+        
+        <div className="pt-2">
+          <Label htmlFor="card-id" className="mb-1 block">ID карты</Label>
+          <div className="flex space-x-2">
+            <Input
+              id="card-id"
+              value={cardId}
+              onChange={(e) => setCardId(e.target.value)}
+              placeholder="Введите ID карты (например, F13D89AC42E7B5)"
+              className="font-mono"
+            />
+            <Button 
+              onClick={() => simulateScan()}
+              disabled={readerStatus === 'scanning'}
+              className="shrink-0"
+            >
+              <CreditCard className="w-4 h-4 mr-2" />
+              Считать
             </Button>
           </div>
         </div>
-
-        {isAuthenticated && (
-          <div className="space-y-2 animate-in fade-in-50 slide-in-from-top-5">
-            <div className="rounded-lg bg-green-50 p-3 text-green-700 text-sm flex items-center">
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Успешная авторизация
-            </div>
-
-            <Label htmlFor="equipment">Выбрать оборудование</Label>
-            <div className="flex gap-2">
-              <Select value={selectedEquipment} onValueChange={setSelectedEquipment} disabled={!isActive}>
-                <SelectTrigger id="equipment" className="flex-1">
-                  <SelectValue placeholder="Select equipment" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableEquipment.length === 0 ? (
-                    <SelectItem value="none" disabled>
-                      Нет возможного оборудования
-                    </SelectItem>
-                  ) : (
-                    availableEquipment.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {item.name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              <Button onClick={handleCheckout} disabled={!selectedEquipment || !isActive}>
-                <Package className="h-4 w-4 mr-2" />
-                Заброировать
+        
+        <div className="pt-2">
+          <Label className="mb-2 block">Быстрое тестирование:</Label>
+          <div className="flex flex-wrap gap-2">
+            {sampleCards.map((card) => (
+              <Button
+                key={card.id}
+                variant="outline"
+                size="sm"
+                onClick={() => selectSampleCard(card.id)}
+                className="text-xs"
+              >
+                {card.label}
               </Button>
+            ))}
+          </div>
+        </div>
+        
+        {lastScannedCard && (
+          <div className="mt-4 p-3 bg-gray-100 rounded-md">
+            <Label className="mb-1 block text-sm">Последняя считанная карта:</Label>
+            <code className="block font-mono text-sm">{lastScannedCard}</code>
+            <div className="mt-1 flex items-center text-sm text-green-600">
+              <CheckCircle2 className="w-4 h-4 mr-1" />
+              Карта считана успешно
             </div>
           </div>
         )}
-
-        <div className="mt-4 rounded-lg bg-muted p-4">
-          <h3 className="text-sm font-medium mb-2">Стаус считывателя</h3>
-          <div className="flex items-center gap-2">
-            <div className={`h-3 w-3 rounded-full ${isActive ? "bg-green-500" : "bg-red-500"}`}></div>
-            <span className="text-sm">{isActive ? "Активно" : "Неактивно"}</span>
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            {isActive ? "The card reader is ready to scan student cards" : "The card reader is currently disabled"}
-          </p>
+      </CardContent>
+      
+      <CardFooter className="flex justify-between border-t pt-4">
+        <div className="text-xs text-gray-500">
+          Этот компонент эмулирует работу RFID считывателя для тестирования системы
         </div>
-      </div>
-    </div>
-  )
-}
+        <Button 
+          variant="ghost" 
+          size="sm"
+          onClick={() => {
+            setReaderStatus('error');
+            setStatusMessage('Симуляция ошибки чтения карты');
+            setTimeout(() => {
+              setReaderStatus('ready');
+              setStatusMessage('Считыватель готов к работе');
+            }, 2000);
+          }}
+        >
+          <XCircle className="w-4 h-4 mr-1" />
+          Симуляция ошибки
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+};
+
+export default CardReaderSimulator;
 
