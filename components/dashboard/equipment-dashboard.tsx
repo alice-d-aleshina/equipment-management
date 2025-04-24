@@ -18,6 +18,7 @@ import { initialEquipment, initialStudents } from "@/lib/data"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { io, Socket } from "socket.io-client"
+import { useNotifications } from "@/lib/context/NotificationContext"
 
 // Define interfaces for WebSocket data
 interface CardScanData {
@@ -191,7 +192,6 @@ const AddEquipmentPanel = ({ onClose, onSubmit, newEquipment, handleInputChange,
 export default function EquipmentDashboard() {
   const [equipment, setEquipment] = useState<Equipment[]>([])
   const [students, setStudents] = useState<Student[]>([])
-  const [notifications, setNotifications] = useState<Notification[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [readerActive, setReaderActive] = useState(true)
   const [scanning, setScanning] = useState(false)
@@ -236,6 +236,7 @@ export default function EquipmentDashboard() {
   const [deviceIsMobile, setDeviceIsMobile] = useState<boolean>(false);
   const [lastScannedCardId, setLastScannedCardId] = useState<string>("");
   const socketRef = useRef<Socket | null>(null);
+  const { addNotification, clearNotifications } = useNotifications();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -284,6 +285,18 @@ export default function EquipmentDashboard() {
   useEffect(() => {
     // Connect to the Arduino card reader server WebSocket
     socketRef.current = io('http://localhost:3001');
+    console.log('WebSocket connecting to http://localhost:3001');
+    
+    // Listen for card scan events
+    socketRef.current.on('connect', () => {
+      console.log('WebSocket connected!');
+      addNotification('WebSocket подключен к серверу кард-ридера', 'success');
+    });
+    
+    socketRef.current.on('connect_error', (error) => {
+      console.error('WebSocket connection error:', error);
+      addNotification('Ошибка подключения к серверу кард-ридера', 'error');
+    });
     
     // Listen for card scan events
     socketRef.current.on('card_scan', (data: CardScanData) => {
@@ -306,30 +319,6 @@ export default function EquipmentDashboard() {
       }
     };
   }, []);
-
-  // Add a notification
-  const addNotification = (message: string, type: "success" | "error" | "info") => {
-    const newNotification: Notification = {
-      id: Date.now().toString(),
-      message,
-      type,
-      timestamp: new Date(),
-      read: false,
-    }
-    setNotifications((prev) => [newNotification, ...prev])
-  }
-
-  // Mark all notifications as read
-  const markAllAsRead = () => {
-    setNotifications(prev => 
-      prev.map(notification => ({ ...notification, read: true }))
-    );
-  }
-
-  // Clear all notifications
-  const clearNotifications = () => {
-    setNotifications([]);
-  }
 
   // Handle equipment checkout
   const handleEquipmentCheckout = async (studentId: string, equipmentId: string) => {
@@ -437,29 +426,35 @@ export default function EquipmentDashboard() {
   const handleCardScan = (cardId: string) => {
     if (!cardId) return;
     
+    console.log('Handling card scan for ID:', cardId);
     setLastScannedCardId(cardId);
     
+    // Форматируем ID карты для отображения
+    const formattedCardId = cardId.replace(/\s/g, '').toUpperCase();
+    
     // Add notification showing the scanned card ID
-    addNotification(`Отсканирована карта: ${cardId}`, "info");
+    addNotification(`Отсканирована карта: ${formattedCardId}`, "info");
     
     // Find student with matching card ID
     const matchingStudent = students.find(
-      (student) => student.card_id && student.card_id.toUpperCase() === cardId.toUpperCase()
+      (student) => student.card_id && student.card_id.toUpperCase() === formattedCardId.toUpperCase()
     );
     
     if (matchingStudent) {
       // Student found
-      addNotification(`Карта верифицирована: ${matchingStudent.name} (ID: ${cardId})`, "success");
+      console.log('Found student:', matchingStudent);
+      addNotification(`Карта верифицирована: ${matchingStudent.name} (ID: ${formattedCardId})`, "success");
       
       // Check if student has access
       if (!matchingStudent.hasAccess) {
-        addNotification(`Доступ запрещен для ${matchingStudent.name} (ID: ${cardId})`, "error");
+        addNotification(`Доступ запрещен для ${matchingStudent.name} (ID: ${formattedCardId})`, "error");
       } else {
-        addNotification(`Доступ разрешен для ${matchingStudent.name} (ID: ${cardId})`, "success");
+        addNotification(`Доступ разрешен для ${matchingStudent.name} (ID: ${formattedCardId})`, "success");
       }
     } else {
       // No matching student found
-      addNotification(`Карта не связана ни с одним студентом (ID: ${cardId})`, "error");
+      console.log('No matching student found for card:', formattedCardId);
+      addNotification(`Карта не связана ни с одним студентом (ID: ${formattedCardId})`, "error");
     }
   };
 
@@ -657,50 +652,10 @@ export default function EquipmentDashboard() {
                   <p className="text-sm text-gray-500 mt-1">Недавняя активность</p>
                 </div>
                 <div className="p-0">
-                  <div className="flex flex-col h-full">
-                    {notifications.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-10 px-4 text-gray-500 h-[300px]">
-                        <BellOff className="h-12 w-12 mb-4 text-gray-300" />
-                        <h3 className="text-lg font-medium text-gray-900 mb-1">Нет уведомлений</h3>
-                        <p className="text-sm text-center">Здесь будут отображаться уведомления о действиях в системе</p>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center justify-between px-6 py-2 border-b border-gray-100">
-                          <span className="text-sm font-medium text-gray-500">
-                            {notifications.length} {notifications.length === 1 ? 'уведомление' : 'уведомлений'}
-                          </span>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="text-xs text-gray-500"
-                            onClick={clearNotifications}
-                          >
-                            Очистить все
-                          </Button>
-                        </div>
-                        <ScrollArea className="flex-1 h-[400px]">
-                          <div className="divide-y divide-gray-100">
-                            {notifications.map((notification) => (
-                              <div
-                                key={notification.id}
-                                className="flex items-start gap-3 p-4 hover:bg-gray-50"
-                              >
-                                <div className="shrink-0 mt-0.5">
-                                  {notification.type === "success" && <CheckCircle className="h-4 w-4 text-green-500" />}
-                                  {notification.type === "error" && <AlertCircle className="h-4 w-4 text-red-500" />}
-                                  {notification.type === "info" && <Info className="h-4 w-4 text-blue-500" />}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-sm text-gray-700">{notification.message}</p>
-                                  <p className="text-xs text-gray-500 mt-1">{formatDate(notification.timestamp)}</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </ScrollArea>
-                      </>
-                    )}
+                  <div className="flex flex-col items-center justify-center py-10 px-4 text-gray-500 h-[300px]">
+                    <BellOff className="h-12 w-12 mb-4 text-gray-300" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-1">Настроена панель уведомлений</h3>
+                    <p className="text-sm text-center">Смотрите уведомления в правом верхнем углу экрана</p>
                   </div>
                 </div>
               </div>

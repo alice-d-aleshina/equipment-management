@@ -143,79 +143,95 @@ async function connectToPort(portName) {
       parser.on('data', (data) => {
         try {
           const message = data.toString().trim();
-          console.log(`Received: ${message}`);
           
-          // Попытка распарсить JSON
-          try {
-            const json = JSON.parse(message);
-            processArduinoMessage(json);
-          } catch (parseError) {
-            console.log(`Not a JSON message: ${message}`);
+          // Убираем вывод всех сырых данных, чтобы уменьшить шум в логах
+          if (message.length > 0) {
+            console.log(`Received data of length ${message.length}`);
+          } else {
+            return; // Пропускаем пустые сообщения
+          }
+          
+          // Ищем в сообщении JSON-формат (редкий случай)
+          if (message.startsWith('{') && message.endsWith('}')) {
+            try {
+              const json = JSON.parse(message);
+              processArduinoMessage(json);
+              return; // Если успешно обработали как JSON, дальше не идем
+            } catch (parseError) {
+              // Тихо пропускаем ошибку JSON
+            }
+          }
+          
+          // Обработка разных типов сообщений от карты
+          
+          // 1. Обработка сырых данных (Raw Data)
+          if (message.includes('Raw Data:')) {
+            console.log('Raw data detected');
+            // Сохраняем для последующей обработки, но не логгируем
+          }
+          
+          // 2. Обработка типа карты
+          if (message.includes('Card Type:') || message.includes('MIFARE')) {
+            console.log('Card type detected:', message);
+            lastStatus = `Card detected: ${message}`;
             
-            // Проверка на распознанный тип карты
-            if (message.includes('Card Type:') || message.includes('MIFARE')) {
-              console.log('Card type detected');
-              lastStatus = `Card detected: ${message}`;
-              
-              // После обнаружения карты, запрашиваем её UID
+            // После обнаружения карты, запрашиваем её UID (если это ещё не запрос UID)
+            if (!message.includes('UID:')) {
               setTimeout(() => {
-                // Отправка запроса UID
                 if (serialPort && serialPort.isOpen) {
                   console.log('Requesting card UID...');
                   serialPort.write('g\n'); // Команда запроса UID
                 }
               }, 200);
             }
-            
-            // Проверка на UID карты
-            if (message.includes('UID:') || message.includes('Card UID:')) {
-              const matches = message.match(/([0-9A-F][0-9A-F][ :]?){4,}/i);
-              if (matches) {
-                const cardId = matches[0].replace(/[ :]/g, '').toUpperCase();
-                console.log(`Extracted card ID: ${cardId}`);
-                
-                cardPresent = true;
-                lastCardId = cardId;
-                lastCardType = 'MIFARE 1K'; // Из предыдущего сообщения
-                lastStatus = `Card detected: ${lastCardId}`;
-                
-                // Отправляем данные карты через WebSocket
-                if (io) {
-                  io.emit('card_scan', { cardId: lastCardId, cardType: lastCardType });
-                }
-                
-                // Проверка карты в Supabase через бэкенд
-                verifyCardWithBackend(cardId);
-              }
-            }
-            
-            // Проверка на возможный ID карты (например "A6860588")
-            if (message.match(/^[A-F0-9]{8,}$/i)) {
-              const cardId = message.toUpperCase();
-              console.log(`Possible card ID detected: ${cardId}`);
+          }
+          
+          // 3. Расширенный поиск UID карты с поддержкой разных форматов
+          // Ищем как Card Number, так и Card UID
+          if (message.includes('Card Number:') || message.includes('UID:') || message.includes('Card UID:')) {
+            // Ищем шестнадцатеричные значения в сообщении
+            const matches = message.match(/([0-9A-F][0-9A-F][ :]?){4,}/i);
+            if (matches) {
+              const cardId = matches[0].replace(/[ :]/g, '').toUpperCase();
+              console.log(`Extracted card ID: ${cardId}`);
               
               cardPresent = true;
               lastCardId = cardId;
-              lastCardType = 'Unknown Type';
+              lastCardType = 'MIFARE 1K'; // Из предыдущего сообщения
               lastStatus = `Card detected: ${lastCardId}`;
               
               // Отправляем данные карты через WebSocket
               if (io) {
                 io.emit('card_scan', { cardId: lastCardId, cardType: lastCardType });
+                console.log(`Card ID ${lastCardId} sent via WebSocket`);
               }
               
               // Проверка карты в Supabase через бэкенд
               verifyCardWithBackend(cardId);
             }
-            
-            // Проверяем формат из примера: "A 03"
-            const formatMatches = message.match(/A (\d+)/i);
-            if (formatMatches) {
-              console.log(`Command identifier detected: A ${formatMatches[1]}`);
-              // Это может быть команда или статус от считывателя
-              // A 03 может указывать на обнаружение карты
-            }
           }
+          
+          // 4. Прямое обнаружение ID карты (формат A6860588)
+          const directCardMatch = message.match(/^[A-F0-9]{8,}$/i);
+          if (directCardMatch) {
+            const cardId = directCardMatch[0].toUpperCase();
+            console.log(`Direct card ID detected: ${cardId}`);
+            
+            cardPresent = true;
+            lastCardId = cardId;
+            lastCardType = detectCardType(cardId);
+            lastStatus = `Card detected: ${lastCardId}`;
+            
+            // Отправляем данные карты через WebSocket
+            if (io) {
+              io.emit('card_scan', { cardId: lastCardId, cardType: lastCardType });
+              console.log(`Card ID ${lastCardId} sent via WebSocket`);
+            }
+            
+            // Проверка карты в Supabase через бэкенд
+            verifyCardWithBackend(cardId);
+          }
+          
         } catch (err) {
           console.error(`Error processing data: ${err.message}`);
         }
@@ -277,16 +293,20 @@ function processArduinoMessage(message) {
 
 // Определение типа карты по ID
 function detectCardType(cardId) {
-  if (!cardId) return 'Unknown';
+  if (!cardId) return 'Unknown Card';
   
   cardId = cardId.toUpperCase();
   
-  // Простые правила для демонстрации
-  if (cardId.startsWith('04')) return 'Student Card';
-  if (cardId.startsWith('F1')) return 'Faculty Card';
-  if (cardId.startsWith('7B')) return 'Guest Card';
+  // Расширенные правила определения типа карты
+  if (cardId.startsWith('04')) return 'MIFARE 1K Student Card';
+  if (cardId.startsWith('A6')) return 'MIFARE 1K Standard';
+  if (cardId.startsWith('F1')) return 'MIFARE Faculty Card';
+  if (cardId.startsWith('7B')) return 'MIFARE Guest Card';
+  if (cardId.length === 8) return 'MIFARE 1K Standard';
+  if (cardId.length === 14) return 'MIFARE Ultralight';
+  if (cardId.length === 20) return 'MIFARE DESFire';
   
-  return 'Unknown Card';
+  return 'Unknown Card Type';
 }
 
 // Отправка команды на Arduino
@@ -366,16 +386,30 @@ function sendCardDataToBackend(cardId, cardType) {
 function verifyCardWithBackend(cardId) {
   if (!cardId) return;
   
-  console.log(`Verifying card in Supabase: ${cardId}`);
+  console.log(`Verifying card in backend: ${cardId}`);
+  
+  // Добавляем логи для отладки
+  console.log(`Backend URL: ${BACKEND_URL}/api/auth/verify-card`);
   
   // Отправка HTTP запроса на бэкенд для проверки карты
   axios.post(`${BACKEND_URL}/api/auth/verify-card`, { card_id: cardId })
     .then(response => {
+      console.log('Backend response received:', response.status);
+      
       if (response.data && response.data.success) {
         // Карта найдена в базе данных
         const user = response.data.user;
         console.log('User found:', user);
         lastStatus = `Verified: ${user.name || user.email || 'User #' + user.id}`;
+        
+        // Отправляем обновленную информацию через WebSocket
+        if (io) {
+          io.emit('card_verification', { 
+            cardId: lastCardId,
+            verified: true,
+            user: user
+          });
+        }
         
         // Визуальная индикация успешной верификации (через Arduino)
         sendCommandToArduino('led', { led: 'green', state: 1 });
@@ -394,11 +428,26 @@ function verifyCardWithBackend(cardId) {
         setTimeout(() => {
           sendCommandToArduino('led', { led: 'red', state: 0 });
         }, 2000);
+        
+        // Отправляем информацию через WebSocket
+        if (io) {
+          io.emit('card_verification', { 
+            cardId: lastCardId,
+            verified: false
+          });
+        }
       }
     })
     .catch(error => {
       console.error('Error verifying card:', error.message);
-      lastStatus = `Verification error: ${error.message}`;
+      
+      // Включаем больше деталей об ошибке для отладки
+      if (error.response) {
+        console.error('Response status:', error.response.status);
+        console.error('Response data:', error.response.data);
+      } else if (error.request) {
+        console.error('No response received, request was:', error.request);
+      }
       
       // Визуальная индикация ошибки
       sendCommandToArduino('led', { led: 'red', state: 1 });
