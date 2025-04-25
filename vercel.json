@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "buildCommand": "npm install --no-audit --no-fund --legacy-peer-deps --prefer-offline && npm run build",
-  "installCommand": "npm install --no-audit --no-fund --legacy-peer-deps --prefer-offline --no-package-lock",
+  "buildCommand": "npm install --no-audit --no-fund --force --legacy-peer-deps --prefer-offline && npm run build",
+  "installCommand": "npm install --no-audit --no-fund --force --legacy-peer-deps --prefer-offline --no-package-lock",
   "framework": "nextjs",
   "outputDirectory": ".next",
   "env": {
