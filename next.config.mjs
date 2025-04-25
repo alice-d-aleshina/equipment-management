@@ -21,6 +21,13 @@ const nextConfig = {
     parallelServerBuildTraces: true,
     parallelServerCompiles: true,
   },
+  webpack: (config, { isServer }) => {
+    // Fixes npm packages that depend on `serialport` module
+    if (isServer) {
+      config.externals.push('serialport')
+    }
+    return config
+  },
 }
 
 mergeConfig(nextConfig, userConfig)

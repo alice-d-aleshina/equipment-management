@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_SUPABASE_URL=https://hvgdtqkvkaiakbqtfkwv.supabase.co
+        - NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2Z2R0cWt2a2FpYWticXRma3d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUzMjI3MDYsImV4cCI6MjA2MDg5ODcwNn0.CqNroXjBmqMBhOaSvmkeFOlS_IWBChnCNR5Z665wFrY
+        - SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2Z2R0cWt2a2FpYWticXRma3d2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTMyMjcwNiwiZXhwIjoyMDYwODk4NzA2fQ.e_viDYBLvYMZSzCRzDgo40nrcZ-5cWB7PqBJZhvdx1k
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NPM_CONFIG_LEGACY_PEER_DEPS=true
+      # Переменные окружения Supabase
+      - NEXT_PUBLIC_SUPABASE_URL=https://hvgdtqkvkaiakbqtfkwv.supabase.co
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2Z2R0cWt2a2FpYWticXRma3d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUzMjI3MDYsImV4cCI6MjA2MDg5ODcwNn0.CqNroXjBmqMBhOaSvmkeFOlS_IWBChnCNR5Z665wFrY
+      - SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2Z2R0cWt2a2FpYWticXRma3d2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTMyMjcwNiwiZXhwIjoyMDYwODk4NzA2fQ.e_viDYBLvYMZSzCRzDgo40nrcZ-5cWB7PqBJZhvdx1k
+    env_file:
+      - .env
+    # Grant access to host's serial devices
+    devices:
+      - /dev/cu.usbserial-1420 # Adjust this path based on your actual Arduino port
+      - /dev/ttyACM0:/dev/ttyACM0 # Common path for Arduino Uno
+    # For development with hot reload, uncomment the following lines:
+    # volumes:
+    #  - .:/app
+    #  - /app/node_modules
+    #  - /app/.next
+    restart: unless-stopped 

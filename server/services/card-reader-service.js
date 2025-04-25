@@ -1,5 +1,16 @@
-const { SerialPort } = require('serialport');
-const { ReadlineParser } = require('@serialport/parser-readline');
+let SerialPort;
+let ReadlineParser;
+let isSerialPortAvailable = true;
+
+try {
+  const serialport = require('serialport');
+  SerialPort = serialport.SerialPort;
+  ReadlineParser = require('@serialport/parser-readline').ReadlineParser;
+} catch (error) {
+  console.warn('SerialPort module not available:', error.message);
+  isSerialPortAvailable = false;
+}
+
 const { EventEmitter } = require('events');
 const logger = require('../utils/logger');
 
@@ -11,6 +22,12 @@ const logger = require('../utils/logger');
 class CardReaderService extends EventEmitter {
   constructor() {
     super();
+    
+    if (!isSerialPortAvailable) {
+      this.mockImplementation();
+      return;
+    }
+    
     this.port = null;
     this.parser = null;
     this.connected = false;
@@ -22,11 +39,40 @@ class CardReaderService extends EventEmitter {
     this.autoConnect = true;
     this.cardData = {};
   }
+  
+  /**
+   * Provide mock implementation when serialport is not available
+   */
+  mockImplementation() {
+    console.log('Using mock implementation for CardReaderService');
+    this.connected = false;
+    this.lastStatus = { connected: false, message: 'SerialPort not available' };
+    this.cardData = {};
+    
+    // Mock methods
+    this.isConnected = () => false;
+    this.getLastStatus = () => this.lastStatus;
+    this.isCardPresent = () => false;
+    this.getLastCardId = () => null;
+    this.getLastCardType = () => null;
+    this.getUptime = () => 0;
+    this.connect = () => false;
+    this.listPorts = async () => [];
+    this.findAndConnect = async () => console.log('Mock: findAndConnect called');
+    this.disconnect = () => console.log('Mock: disconnect called');
+    this.resetReader = () => console.log('Mock: resetReader called');
+    this.getStatus = () => this.lastStatus;
+  }
 
   /**
    * Initialize the card reader service
    */
   init() {
+    if (!isSerialPortAvailable) {
+      logger.warn('Card reader service initialized in mock mode');
+      return this;
+    }
+    
     logger.info('Initializing card reader service');
     
     // Try to find and connect to the Arduino
@@ -47,6 +93,10 @@ class CardReaderService extends EventEmitter {
    * @returns {Promise<Array>} List of available ports
    */
   async listPorts() {
+    if (!isSerialPortAvailable) {
+      return [];
+    }
+    
     try {
       const ports = await SerialPort.list();
       logger.info(`Found ${ports.length} serial ports`);
@@ -87,6 +137,11 @@ class CardReaderService extends EventEmitter {
    * @param {string} path - Path to the serial port
    */
   connect(path) {
+    if (!isSerialPortAvailable) {
+      logger.warn('Cannot connect - SerialPort module not available');
+      return false;
+    }
+    
     if (this.connected) {
       this.disconnect();
     }
@@ -120,6 +175,7 @@ class CardReaderService extends EventEmitter {
         }, 1000);
       });
       
+      return true;
     } catch (error) {
       this.lastStatus = { 
         connected: false, 
@@ -127,6 +183,7 @@ class CardReaderService extends EventEmitter {
       };
       logger.error('Error connecting to serial port:', error);
       this.emit('error', error);
+      return false;
     }
   }
 
@@ -335,10 +392,10 @@ class CardReaderService extends EventEmitter {
     this.reconnectAttempts++;
     const delay = this.reconnectDelay * this.reconnectAttempts;
     
-    logger.info(`Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`);
+    logger.info(`Scheduling reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`);
     
     setTimeout(() => {
-      logger.info(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+      logger.info(`Attempting to reconnect`);
       this.findAndConnect();
     }, delay);
   }
@@ -386,6 +443,57 @@ class CardReaderService extends EventEmitter {
     this.disconnect();
     
     logger.info('Card reader service cleaned up');
+  }
+
+  /**
+   * Check if the reader is connected
+   * @returns {boolean} Connection status
+   */
+  isConnected() {
+    return this.connected;
+  }
+
+  /**
+   * Get the last status message
+   * @returns {Object} Last status message
+   */
+  getLastStatus() {
+    return this.lastStatus;
+  }
+
+  /**
+   * Check if a card is present
+   * @returns {boolean} True if a card is present
+   */
+  isCardPresent() {
+    return !!this.cardData.id;
+  }
+
+  /**
+   * Get the last read card ID
+   * @returns {string|null} Card ID or null if no card
+   */
+  getLastCardId() {
+    return this.cardData.id || null;
+  }
+
+  /**
+   * Get the last read card type
+   * @returns {string|null} Card type or null if no card
+   */
+  getLastCardType() {
+    return this.cardData.type || null;
+  }
+
+  /**
+   * Get uptime in seconds
+   * @returns {number} Uptime in seconds or 0 if not connected
+   */
+  getUptime() {
+    if (!this.lastStatus || !this.lastStatus.uptime) {
+      return 0;
+    }
+    return this.lastStatus.uptime;
   }
 }
 
