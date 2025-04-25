@@ -21,6 +21,28 @@ const nextConfig = {
     parallelServerBuildTraces: true,
     parallelServerCompiles: true,
   },
+  webpack: (config, { isServer }) => {
+    // Исключаем все native модули при сборке на Vercel
+    if (isServer) {
+      config.externals = [...config.externals, 
+        'serialport',
+        '@serialport/parser-readline',
+        '@serialport/stream'
+      ];
+    }
+    
+    // Проверяем, не запущена ли сборка на Vercel
+    if (process.env.VERCEL) {
+      // Добавляем заглушки для native модулей
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        'serialport': false,
+        '@serialport/parser-readline': false
+      };
+    }
+    
+    return config;
+  },
 }
 
 mergeConfig(nextConfig, userConfig)
