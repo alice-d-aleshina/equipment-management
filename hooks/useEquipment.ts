@@ -39,6 +39,7 @@ export const useEquipmentItem = (id?: number, qrCode?: string) => {
   const [equipment, setEquipment] = useState<Equipment | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
+  
 
   useEffect(() => {
     const fetchEquipment = async () => {
