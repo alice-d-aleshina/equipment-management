@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "buildCommand": "npm install --no-audit --no-fund --legacy-peer-deps && npm run build",
+  "installCommand": "npm install --no-audit --no-fund --legacy-peer-deps --no-package-lock",
+  "framework": "nextjs",
+  "outputDirectory": ".next",
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://hvgdtqkvkaiakbqtfkwv.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2Z2R0cWt2a2FpYWticXRma3d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUzMjI3MDYsImV4cCI6MjA2MDg5ODcwNn0.CqNroXjBmqMBhOaSvmkeFOlS_IWBChnCNR5Z665wFrY"
+  }
+} 
